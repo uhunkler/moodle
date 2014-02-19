@@ -67,6 +67,11 @@ class renderer_base {
     protected $target;
 
     /**
+     * @var string The regions that have been outputted.
+     */
+    protected $outputtedregions = array();
+
+    /**
      * Constructor
      *
      * The constructor takes two arguments. The first is the page that the renderer
@@ -1392,6 +1397,11 @@ class core_renderer extends renderer_base {
      * @return string the HTML to be output.
      */
     public function blocks_for_region($region) {
+        // Output every region only once,
+        // check if this region has already been output
+        if (in_array($region, $this->outputtedregions)) {
+            return '';
+        }
         $blockcontents = $this->page->blocks->get_content_for_region($region, $this);
         $blocks = $this->page->blocks->get_blocks_for_region($region);
         $lastblock = null;
@@ -3220,6 +3230,11 @@ EOD;
      * @return string HTML.
      */
     public function blocks($region, $classes = array(), $tag = 'aside') {
+        // Output every region only once,
+        // check if this region has already been output
+        if (in_array($region, $this->outputtedregions)) {
+            return '';
+        }
         $displayregion = $this->page->apply_theme_region_manipulations($region);
         $classes = (array)$classes;
         $classes[] = 'block-region';
@@ -3234,6 +3249,8 @@ EOD;
         } else {
             $content = '';
         }
+        // Add this region to the list of outputted regions
+        array_push($this->outputtedregions, $region);
         return html_writer::tag($tag, $content, $attributes);
     }
 
