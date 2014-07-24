@@ -27,6 +27,11 @@ mod_scorm_activate_item = null;
 mod_scorm_parse_toc_tree = null;
 scorm_layout_widget = null;
 
+function underscore(str) {
+    str = String(str).replace(/.N/g,".");
+    return str.replace(/\./g,"__");
+}
+
 M.mod_scorm = {};
 
 M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, hide_toc, collapsetocwinsize, toc_title, window_name, launch_sco, scoes_nav) {
@@ -60,25 +65,16 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
         };
 
         Y.TreeView.prototype.openAll = function () {
-            var tree = this;
-            Y.all('.yui3-treeview-can-have-children').each(function() {
-                var node = tree.getNodeById(this.get('id'));
-                node.open();
-            });
+            this.get('container').all('.yui3-treeview-can-have-children').each(function(target) {
+                this.getNodeById(target.get('id')).open();
+            }, this);
         };
 
-        // TODO: Remove next(), previous() prototype functions after YUI has been updated to 3.11.0 - MDL-41208.
-        Y.Tree.Node.prototype.next = function () {
-            if (this.parent) {
-                return this.parent.children[this.index() + 1];
-            }
-        };
-
-        Y.Tree.Node.prototype.previous = function () {
-            if (this.parent) {
-                return this.parent.children[this.index() - 1];
-            }
-        };
+        Y.TreeView.prototype.closeAll = function () {
+            this.get('container').all('.yui3-treeview-can-have-children').each(function(target) {
+                this.getNodeById(target.get('id')).close();
+            }, this);
+        }
 
         var scorm_parse_toc_tree = function(srcNode) {
             var SELECTORS = {
@@ -141,29 +137,11 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
                 scorm_current_node.select();
             }
 
-            // remove any reference to the old API
-            if (window.API) {
-                window.API = null;
-            }
-            if (window.API_1484_11) {
-                window.API_1484_11 = null;
-            }
+            scorm_tree_node.closeAll();
             var url_prefix = M.cfg.wwwroot + '/mod/scorm/loadSCO.php?';
             var el_old_api = document.getElementById('scormapi123');
             if (el_old_api) {
                 el_old_api.parentNode.removeChild(el_old_api);
-            }
-
-            if (node.title) {
-                var el_scorm_api = document.getElementById("external-scormapi");
-                el_scorm_api.parentNode.removeChild(el_scorm_api);
-                el_scorm_api = document.createElement('script');
-                el_scorm_api.setAttribute('id','external-scormapi');
-                el_scorm_api.setAttribute('type','text/javascript');
-                var pel_scorm_api = document.getElementById('scormapi-parent');
-                pel_scorm_api.appendChild(el_scorm_api);
-                var api_url = M.cfg.wwwroot + '/mod/scorm/loaddatamodel.php?' + node.title;
-                document.getElementById('external-scormapi').src = api_url;
             }
 
             var content = Y.one('#scorm_content');
@@ -202,6 +180,7 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
                 }
                 scorm_fixnav();
             }
+            scorm_tree_node.openAll();
         };
 
         mod_scorm_activate_item = scorm_activate_item;

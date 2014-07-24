@@ -45,6 +45,13 @@ if (!function_exists('iconv')) {
     die();
 }
 
+// Make sure php5-json is available.
+if (!function_exists('json_encode') || !function_exists('json_decode')) {
+    // This also shouldn't happen.
+    echo 'Moodle requires the json PHP extension. Please install or enable the json extension.';
+    die();
+}
+
 define('NO_OUTPUT_BUFFERING', true);
 
 if ((isset($_GET['cache']) and $_GET['cache'] === '0')
@@ -230,6 +237,13 @@ if (!core_tables_exist()) {
 // Check version of Moodle code on disk compared with database
 // and upgrade if possible.
 
+if (!$cache) {
+    // Do not try to do anything fancy in non-cached mode,
+    // this prevents themes from fetching data from non-existent tables.
+    $PAGE->set_pagelayout('maintenance');
+    $PAGE->set_popup_notification_allowed(false);
+}
+
 $stradministration = get_string('administration');
 $PAGE->set_context(context_system::instance());
 
@@ -259,9 +273,6 @@ if (!$cache and $version > $CFG->version) {  // upgrade
     cache_helper::purge_all(true);
     // We then purge the regular caches.
     purge_all_caches();
-
-    $PAGE->set_pagelayout('maintenance');
-    $PAGE->set_popup_notification_allowed(false);
 
     /** @var core_admin_renderer $output */
     $output = $PAGE->get_renderer('core', 'admin');
@@ -340,8 +351,6 @@ if (!$cache and $version > $CFG->version) {  // upgrade
         // Always verify plugin dependencies!
         $failed = array();
         if (!core_plugin_manager::instance()->all_plugins_ok($version, $failed)) {
-            $PAGE->set_pagelayout('maintenance');
-            $PAGE->set_popup_notification_allowed(false);
             $reloadurl = new moodle_url('/admin/index.php', array('confirmupgrade' => 1, 'confirmrelease' => 1, 'cache' => 0));
             echo $output->unsatisfied_dependencies_page($version, $failed, $reloadurl);
             die();
@@ -369,14 +378,9 @@ if (!$cache and moodle_needs_upgrading()) {
     if (!$PAGE->headerprinted) {
         // means core upgrade or installation was not already done
 
-        /** @var core_admin_renderer $output */
-        $output = $PAGE->get_renderer('core', 'admin');
-
         if (!$confirmplugins) {
             $strplugincheck = get_string('plugincheck');
 
-            $PAGE->set_pagelayout('maintenance');
-            $PAGE->set_popup_notification_allowed(false);
             $PAGE->navbar->add($strplugincheck);
             $PAGE->set_title($strplugincheck);
             $PAGE->set_heading($strplugincheck);
@@ -390,6 +394,9 @@ if (!$cache and moodle_needs_upgrading()) {
                 }
                 redirect($PAGE->url);
             }
+
+            /** @var core_admin_renderer $output */
+            $output = $PAGE->get_renderer('core', 'admin');
 
             $deployer = \core\update\deployer::instance();
             if ($deployer->enabled()) {
@@ -414,8 +421,8 @@ if (!$cache and moodle_needs_upgrading()) {
         // Make sure plugin dependencies are always checked.
         $failed = array();
         if (!core_plugin_manager::instance()->all_plugins_ok($version, $failed)) {
-            $PAGE->set_pagelayout('maintenance');
-            $PAGE->set_popup_notification_allowed(false);
+            /** @var core_admin_renderer $output */
+            $output = $PAGE->get_renderer('core', 'admin');
             $reloadurl = new moodle_url('/admin/index.php', array('cache' => 0));
             echo $output->unsatisfied_dependencies_page($version, $failed, $reloadurl);
             die();
@@ -582,10 +589,14 @@ $availableupdatesfetch = $updateschecker->get_last_timefetched();
 $buggyiconvnomb = (!function_exists('mb_convert_encoding') and @iconv('UTF-8', 'UTF-8//IGNORE', '100'.chr(130).'€') !== '100€');
 //check if the site is registered on Moodle.org
 $registered = $DB->count_records('registration_hubs', array('huburl' => HUB_MOODLEORGHUBURL, 'confirmed' => 1));
+// Check if there are any cache warnings.
+$cachewarnings = cache_helper::warnings();
 
 admin_externalpage_setup('adminnotifications');
 
+/* @var core_admin_renderer $output */
 $output = $PAGE->get_renderer('core', 'admin');
-echo $output->admin_notifications_page($maturity, $insecuredataroot, $errorsdisplayed,
-        $cronoverdue, $dbproblems, $maintenancemode, $availableupdates, $availableupdatesfetch, $buggyiconvnomb,
-        $registered);
+
+echo $output->admin_notifications_page($maturity, $insecuredataroot, $errorsdisplayed, $cronoverdue, $dbproblems,
+                                       $maintenancemode, $availableupdates, $availableupdatesfetch, $buggyiconvnomb,
+                                       $registered, $cachewarnings);

@@ -76,6 +76,8 @@ define('AUTH_LOGIN_FAILED', 3);
 /** Can not login because user is locked out. */
 define('AUTH_LOGIN_LOCKOUT', 4);
 
+/** Can not login becauser user is not authorised. */
+define('AUTH_LOGIN_UNAUTHORISED', 5);
 
 /**
  * Abstract authentication plugin.
@@ -518,7 +520,7 @@ class auth_plugin_base {
      * authentication method manually is allowed.
      *
      * @return bool
-     * @since 2.6
+     * @since Moodle 2.6
      */
     function can_be_manually_set() {
         // Override if needed.
@@ -565,6 +567,16 @@ class auth_plugin_base {
         unset($proffields);
 
         return $this->customfields;
+    }
+
+    /**
+     * Post logout hook.
+     *
+     * This method is used after moodle logout by auth classes to execute server logout.
+     *
+     * @param stdClass $user clone of USER object before the user session was terminated
+     */
+    public function postlogout_hook($user) {
     }
 }
 
@@ -647,15 +659,18 @@ function login_attempt_failed($user) {
         return;
     }
 
+    $count = get_user_preferences('login_failed_count', 0, $user);
+    $last = get_user_preferences('login_failed_last', 0, $user);
+    $sincescuccess = get_user_preferences('login_failed_count_since_success', $count, $user);
+    $sincescuccess = $sincescuccess + 1;
+    set_user_preference('login_failed_count_since_success', $sincescuccess, $user);
+
     if (empty($CFG->lockoutthreshold)) {
         // No threshold means no lockout.
         // Always unlock here, there might be some race conditions or leftovers when switching threshold.
         login_unlock_account($user);
         return;
     }
-
-    $count = get_user_preferences('login_failed_count', 0, $user);
-    $last = get_user_preferences('login_failed_last', 0, $user);
 
     if (!empty($CFG->lockoutwindow) and time() - $last > $CFG->lockoutwindow) {
         $count = 0;
@@ -677,7 +692,7 @@ function login_attempt_failed($user) {
  * @param stdClass $user
  */
 function login_lock_account($user) {
-    global $CFG, $SESSION;
+    global $CFG;
 
     if ($user->mnethostid != $CFG->mnet_localhost_id) {
         return;
@@ -699,12 +714,7 @@ function login_lock_account($user) {
         $secret = random_string(15);
         set_user_preference('login_lockout_secret', $secret, $user);
 
-        // Some nasty hackery to get strings and dates localised for target user.
-        $sessionlang = isset($SESSION->lang) ? $SESSION->lang : null;
-        if (get_string_manager()->translation_exists($user->lang, false)) {
-            $SESSION->lang = $user->lang;
-            moodle_setlocale();
-        }
+        $oldforcelang = force_current_language($user->lang);
 
         $site = get_site();
         $supportuser = core_user::get_support_user();
@@ -725,10 +735,7 @@ function login_lock_account($user) {
             email_to_user($user, $supportuser, $subject, $message);
         }
 
-        if ($SESSION->lang !== $sessionlang) {
-            $SESSION->lang = $sessionlang;
-            moodle_setlocale();
-        }
+        force_current_language($oldforcelang);
     }
 }
 

@@ -296,7 +296,7 @@ Y.extend(RESOURCETOOLBOX, TOOLBOX, {
      * @protected
      * @method handle_data_action
      * @param {EventFacade} ev The event that was triggered.
-     * @returns {boolean}
+     * @return {boolean}
      */
     handle_data_action: function(ev) {
         // We need to get the anchor element that triggered this event.
@@ -478,22 +478,29 @@ Y.extend(RESOURCETOOLBOX, TOOLBOX, {
             confirmstring = M.util.get_string('deletechecktype', 'moodle', plugindata);
         }
 
-        // Confirm element removal
-        if (!confirm(confirmstring)) {
-            return this;
-        }
+        // Create the confirmation dialogue.
+        var confirm = new M.core.confirm({
+            question: confirmstring,
+            modal: true
+        });
 
-        // Actually remove the element
-        element.remove();
-        var data = {
-            'class': 'resource',
-            'action': 'DELETE',
-            'id': Y.Moodle.core_course.util.cm.getId(element)
-        };
-        this.send_request(data);
-        if (M.core.actionmenu && M.core.actionmenu.instance) {
-            M.core.actionmenu.instance.hideMenu();
-        }
+        // If it is confirmed.
+        confirm.on('complete-yes', function() {
+
+            // Actually remove the element.
+            element.remove();
+            var data = {
+                'class': 'resource',
+                'action': 'DELETE',
+                'id': Y.Moodle.core_course.util.cm.getId(element)
+            };
+            this.send_request(data);
+            if (M.core.actionmenu && M.core.actionmenu.instance) {
+                M.core.actionmenu.instance.hideMenu();
+            }
+
+        }, this);
+
         return this;
     },
 
@@ -580,7 +587,7 @@ Y.extend(RESOURCETOOLBOX, TOOLBOX, {
      * @param {Node} button The button that triggered the action.
      * @param {Node} activity The activity node that this action will be performed on.
      * @param {String} action 'show' or 'hide'.
-     * @returns {Number} 1 if we changed to visible, 0 if we were hiding.
+     * @return {Number} 1 if we changed to visible, 0 if we were hiding.
      */
     handle_resource_dim: function(button, activity, action) {
         var toggleclass = CSS.DIMCLASS,

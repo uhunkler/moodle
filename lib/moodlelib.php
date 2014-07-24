@@ -1329,6 +1329,8 @@ function html_is_blank($string) {
  *
  * A NULL value will delete the entry.
  *
+ * NOTE: this function is called from lib/db/upgrade.php
+ *
  * @param string $name the key to set
  * @param string $value the value to set (without magic quotes)
  * @param string $plugin (optional) the plugin scope, default null
@@ -1398,6 +1400,8 @@ function set_config($name, $value, $plugin=null) {
  *
  * If called with 2 parameters it will return a string single
  * value or false if the value is not found.
+ *
+ * NOTE: this function is called from lib/db/upgrade.php
  *
  * @static string|false $siteidentifier The site identifier is not cached. We use this static cache so
  *     that we need only fetch it once per request.
@@ -1484,6 +1488,8 @@ function get_config($plugin, $name = null) {
 
 /**
  * Removes a key from global configuration.
+ *
+ * NOTE: this function is called from lib/db/upgrade.php
  *
  * @param string $name the key to set
  * @param string $plugin (optional) the plugin scope
@@ -1610,6 +1616,7 @@ function purge_all_caches() {
     remove_dir($CFG->localcachedir, true);
     set_config('localcachedirpurged', time());
     make_localcache_directory('', true);
+    \core\task\manager::clear_static_caches();
 }
 
 /**
@@ -2173,7 +2180,7 @@ function userdate($date, $format = '', $timezone = 99, $fixday = true, $fixhour 
  * @param string $format strftime format.
  * @param int|float $tz the numerical timezone, typically returned by {@link get_user_timezone_offset()}.
  * @return string the formatted date/time.
- * @since 2.3.3
+ * @since Moodle 2.3.3
  */
 function date_format_string($date, $format, $tz = 99) {
     global $CFG;
@@ -3161,10 +3168,11 @@ function require_logout() {
     }
 
     // Execute hooks before action.
+    $authplugins = array();
     $authsequence = get_enabled_auth_plugins();
     foreach ($authsequence as $authname) {
-        $authplugin = get_auth_plugin($authname);
-        $authplugin->prelogout_hook();
+        $authplugins[$authname] = get_auth_plugin($authname);
+        $authplugins[$authname]->prelogout_hook();
     }
 
     // Store info that gets removed during logout.
@@ -3180,11 +3188,19 @@ function require_logout() {
         $event->add_record_snapshot('sessions', $session);
     }
 
+    // Clone of $USER object to be used by auth plugins.
+    $user = fullclone($USER);
+
     // Delete session record and drop $_SESSION content.
     \core\session\manager::terminate_current();
 
     // Trigger event AFTER action.
     $event->trigger();
+
+    // Hook to execute auth plugins redirection after event trigger.
+    foreach ($authplugins as $authplugin) {
+        $authplugin->postlogout_hook($user);
+    }
 }
 
 /**
@@ -3688,6 +3704,8 @@ function get_all_user_name_fields($returnsql = false, $tableprefix = null, $pref
 /**
  * Reduces lines of duplicated code for getting user name fields.
  *
+ * See also {@link user_picture::unalias()}
+ *
  * @param object $addtoobject Object to add user name fields to.
  * @param object $secondobject Object that contains user name field information.
  * @param string $prefix prefix to be added to all fields (including $additionalfields) e.g. authorfirstname.
@@ -4026,7 +4044,7 @@ function create_user_record($username, $password, $auth = 'manual') {
     $newuser->timemodified = $newuser->timecreated;
     $newuser->mnethostid = $CFG->mnet_localhost_id;
 
-    $newuser->id = user_create_user($newuser, false);
+    $newuser->id = user_create_user($newuser, false, false);
 
     // Save user profile data.
     profile_save_data($newuser);
@@ -4037,6 +4055,9 @@ function create_user_record($username, $password, $auth = 'manual') {
     }
     // Set the password.
     update_internal_user_password($user, $password);
+
+    // Trigger event.
+    \core\event\user_created::create_from_userid($newuser->id)->trigger();
 
     return $user;
 }
@@ -4049,16 +4070,31 @@ function create_user_record($username, $password, $auth = 'manual') {
  */
 function update_user_record($username) {
     global $DB, $CFG;
-    require_once($CFG->dirroot."/user/profile/lib.php");
-    require_once($CFG->dirroot.'/user/lib.php');
     // Just in case check text case.
     $username = trim(core_text::strtolower($username));
 
     $oldinfo = $DB->get_record('user', array('username' => $username, 'mnethostid' => $CFG->mnet_localhost_id), '*', MUST_EXIST);
+    return update_user_record_by_id($oldinfo->id);
+}
+
+/**
+ * Will update a local user record from an external source (MNET users can not be updated using this method!).
+ *
+ * @param int $id user id
+ * @return stdClass A complete user object
+ */
+function update_user_record_by_id($id) {
+    global $DB, $CFG;
+    require_once($CFG->dirroot."/user/profile/lib.php");
+    require_once($CFG->dirroot.'/user/lib.php');
+
+    $params = array('mnethostid' => $CFG->mnet_localhost_id, 'id' => $id, 'deleted' => 0);
+    $oldinfo = $DB->get_record('user', $params, '*', MUST_EXIST);
+
     $newuser = array();
     $userauth = get_auth_plugin($oldinfo->auth);
 
-    if ($newinfo = $userauth->get_userinfo($username)) {
+    if ($newinfo = $userauth->get_userinfo($oldinfo->username)) {
         $newinfo = truncate_userinfo($newinfo);
         $customfields = $userauth->get_custom_user_profile_fields();
 
@@ -4093,10 +4129,13 @@ function update_user_record($username) {
         if ($newuser) {
             $newuser['id'] = $oldinfo->id;
             $newuser['timemodified'] = time();
-            user_update_user((object) $newuser, false);
+            user_update_user((object) $newuser, false, false);
 
             // Save user profile data.
             profile_save_data((object) $newuser);
+
+            // Trigger event.
+            \core\event\user_updated::create_from_userid($newuser['id'])->trigger();
         }
     }
 
@@ -4120,9 +4159,9 @@ function truncate_userinfo(array $info) {
         'icq'         =>  15,
         'phone1'      =>  20,
         'phone2'      =>  20,
-        'institution' =>  40,
-        'department'  =>  30,
-        'address'     =>  70,
+        'institution' => 255,
+        'department'  => 255,
+        'address'     => 255,
         'city'        => 120,
         'country'     =>   2,
         'url'         => 255,
@@ -4196,7 +4235,7 @@ function delete_user(stdClass $user) {
     // TODO: remove from cohorts using standard API here.
 
     // Remove user tags.
-    tag_set('user', $user->id, array());
+    tag_set('user', $user->id, array(), 'core', $usercontext->id);
 
     // Unconditionally unenrol from all courses.
     enrol_user_delete($user);
@@ -4255,7 +4294,8 @@ function delete_user(stdClass $user) {
     $updateuser->picture      = 0;
     $updateuser->timemodified = time();
 
-    user_update_user($updateuser, false);
+    // Don't trigger update event, as user is being deleted.
+    user_update_user($updateuser, false, false);
 
     // Now do a final accesslib cleanup - removes all role assignments in user context and context itself.
     context_helper::delete_instance(CONTEXT_USER, $user->id);
@@ -4265,6 +4305,7 @@ function delete_user(stdClass $user) {
     $event = \core\event\user_deleted::create(
             array(
                 'objectid' => $user->id,
+                'relateduserid' => $user->id,
                 'context' => $usercontext,
                 'other' => array(
                     'username' => $user->username,
@@ -4322,7 +4363,7 @@ function guest_user() {
  *
  * Note: this function works only with non-mnet accounts!
  *
- * @param string $username  User's username
+ * @param string $username  User's username (or also email if $CFG->authloginviaemail enabled)
  * @param string $password  User's password
  * @param bool $ignorelockout useful when guessing is prevented by other mechanism such as captcha or SSO
  * @param int $failurereason login failure reason, can be used in renderers (it may disclose if account exists)
@@ -4332,9 +4373,27 @@ function authenticate_user_login($username, $password, $ignorelockout=false, &$f
     global $CFG, $DB;
     require_once("$CFG->libdir/authlib.php");
 
+    if ($user = get_complete_user_data('username', $username, $CFG->mnet_localhost_id)) {
+        // we have found the user
+
+    } else if (!empty($CFG->authloginviaemail)) {
+        if ($email = clean_param($username, PARAM_EMAIL)) {
+            $select = "mnethostid = :mnethostid AND LOWER(email) = LOWER(:email) AND deleted = 0";
+            $params = array('mnethostid' => $CFG->mnet_localhost_id, 'email' => $email);
+            $users = $DB->get_records_select('user', $select, $params, 'id', 'id', 0, 2);
+            if (count($users) === 1) {
+                // Use email for login only if unique.
+                $user = reset($users);
+                $user = get_complete_user_data('id', $user->id);
+                $username = $user->username;
+            }
+            unset($users);
+        }
+    }
+
     $authsenabled = get_enabled_auth_plugins();
 
-    if ($user = get_complete_user_data('username', $username, $CFG->mnet_localhost_id)) {
+    if ($user) {
         // Use manual if auth not set.
         $auth = empty($user->auth) ? 'manual' : $user->auth;
         if (!empty($user->suspended)) {
@@ -4370,20 +4429,6 @@ function authenticate_user_login($username, $password, $ignorelockout=false, &$f
                     'reason' => $failurereason)));
             $event->trigger();
             error_log('[client '.getremoteaddr()."]  $CFG->wwwroot  Deleted Login:  $username  ".$_SERVER['HTTP_USER_AGENT']);
-            return false;
-        }
-
-        // Do not try to authenticate non-existent accounts when user creation is not disabled.
-        if (!empty($CFG->authpreventaccountcreation)) {
-            $failurereason = AUTH_LOGIN_NOUSER;
-
-            // Trigger login failed event.
-            $event = \core\event\user_login_failed::create(array('other' => array('username' => $username,
-                    'reason' => $failurereason)));
-            $event->trigger();
-
-            error_log('[client '.getremoteaddr()."]  $CFG->wwwroot  Unknown user, can not create new accounts:  $username  ".
-                    $_SERVER['HTTP_USER_AGENT']);
             return false;
         }
 
@@ -4426,7 +4471,7 @@ function authenticate_user_login($username, $password, $ignorelockout=false, &$f
             // User already exists in database.
             if (empty($user->auth)) {
                 // For some reason auth isn't set yet.
-                $DB->set_field('user', 'auth', $auth, array('username' => $username));
+                $DB->set_field('user', 'auth', $auth, array('id' => $user->id));
                 $user->auth = $auth;
             }
 
@@ -4436,11 +4481,24 @@ function authenticate_user_login($username, $password, $ignorelockout=false, &$f
 
             if ($authplugin->is_synchronised_with_external()) {
                 // Update user record from external DB.
-                $user = update_user_record($username);
+                $user = update_user_record_by_id($user->id);
             }
         } else {
-            // Create account, we verified above that user creation is allowed.
-            $user = create_user_record($username, $password, $auth);
+            // The user is authenticated but user creation may be disabled.
+            if (!empty($CFG->authpreventaccountcreation)) {
+                $failurereason = AUTH_LOGIN_UNAUTHORISED;
+
+                // Trigger login failed event.
+                $event = \core\event\user_login_failed::create(array('other' => array('username' => $username,
+                        'reason' => $failurereason)));
+                $event->trigger();
+
+                error_log('[client '.getremoteaddr()."]  $CFG->wwwroot  Unknown user, can not create new accounts:  $username  ".
+                        $_SERVER['HTTP_USER_AGENT']);
+                return false;
+            } else {
+                $user = create_user_record($username, $password, $auth);
+            }
         }
 
         $authplugin->sync_roles($user);
@@ -4673,9 +4731,13 @@ function hash_internal_user_password($password, $fasthash = false) {
  *
  * @param stdClass $user User object (password property may be updated).
  * @param string $password Plain text password.
+ * @param bool $fasthash If true, use a low cost factor when generating the hash
+ *                       This is much faster to generate but makes the hash
+ *                       less secure. It is used when lots of hashes need to
+ *                       be generated quickly.
  * @return bool Always returns true.
  */
-function update_internal_user_password($user, $password) {
+function update_internal_user_password($user, $password, $fasthash = false) {
     global $CFG, $DB;
     require_once($CFG->libdir.'/password_compat/lib/password.php');
 
@@ -4684,24 +4746,26 @@ function update_internal_user_password($user, $password) {
     if ($authplugin->prevent_local_passwords()) {
         $hashedpassword = AUTH_PASSWORD_NOT_CACHED;
     } else {
-        $hashedpassword = hash_internal_user_password($password);
+        $hashedpassword = hash_internal_user_password($password, $fasthash);
     }
 
     // If verification fails then it means the password has changed.
-    $passwordchanged = !password_verify($password, $user->password);
-    $algorithmchanged = password_needs_rehash($user->password, PASSWORD_DEFAULT);
+    if (isset($user->password)) {
+        // While creating new user, password in unset in $user object, to avoid
+        // saving it with user_create()
+        $passwordchanged = !password_verify($password, $user->password);
+        $algorithmchanged = password_needs_rehash($user->password, PASSWORD_DEFAULT);
+    } else {
+        $passwordchanged = true;
+    }
 
     if ($passwordchanged || $algorithmchanged) {
         $DB->set_field('user', 'password',  $hashedpassword, array('id' => $user->id));
         $user->password = $hashedpassword;
 
         // Trigger event.
-        $event = \core\event\user_updated::create(array(
-             'objectid' => $user->id,
-             'context' => context_user::instance($user->id)
-        ));
-        $event->add_record_snapshot('user', $user);
-        $event->trigger();
+        $user = $DB->get_record('user', array('id' => $user->id));
+        \core\event\user_password_updated::create_from_user($user)->trigger();
     }
 
     return true;
@@ -4855,6 +4919,7 @@ function set_login_session_preferences() {
     $SESSION->justloggedin = true;
 
     unset($SESSION->lang);
+    unset($SESSION->forcelang);
     unset($SESSION->load_navigation_admin);
 }
 
@@ -4895,6 +4960,11 @@ function delete_course($courseorid, $showfeedback = true) {
 
     $DB->delete_records("course", array("id" => $courseid));
     $DB->delete_records("course_format_options", array("courseid" => $courseid));
+
+    // Reset all course related caches here.
+    if (class_exists('format_base', false)) {
+        format_base::reset_course_cache($courseid);
+    }
 
     // Trigger a course deleted event.
     $event = \core\event\course_deleted::create(array(
@@ -5036,12 +5106,6 @@ function remove_course_contents($courseid, $showfeedback = true, array $options 
     $DB->delete_records_select('course_modules_completion',
            'coursemoduleid IN (SELECT id from {course_modules} WHERE course=?)',
            array($courseid));
-    $DB->delete_records_select('course_modules_availability',
-           'coursemoduleid IN (SELECT id from {course_modules} WHERE course=?)',
-           array($courseid));
-    $DB->delete_records_select('course_modules_avail_fields',
-           'coursemoduleid IN (SELECT id from {course_modules} WHERE course=?)',
-           array($courseid));
 
     // Remove course-module data.
     $cms = $DB->get_records('course_modules', array('course' => $course->id));
@@ -5128,7 +5192,6 @@ function remove_course_contents($courseid, $showfeedback = true, array $options 
     // This array stores the tables that need to be cleared, as
     // table_name => column_name that contains the course id.
     $tablestoclear = array(
-        'log' => 'course',               // Course logs (NOTE: this might be changed in the future).
         'backup_courses' => 'courseid',  // Scheduled backup stuff.
         'user_lastaccess' => 'courseid', // User access info.
     );
@@ -5151,13 +5214,7 @@ function remove_course_contents($courseid, $showfeedback = true, array $options 
     }
     $DB->update_record('course', $oldcourse);
 
-    // Delete course sections and availability options.
-    $DB->delete_records_select('course_sections_availability',
-           'coursesectionid IN (SELECT id from {course_sections} WHERE course=?)',
-           array($course->id));
-    $DB->delete_records_select('course_sections_avail_fields',
-           'coursesectionid IN (SELECT id from {course_sections} WHERE course=?)',
-           array($course->id));
+    // Delete course sections.
     $DB->delete_records('course_sections', array('course' => $course->id));
 
     // Delete legacy, section and any other course files.
@@ -5281,11 +5338,6 @@ function reset_course_userdata($data) {
         $DB->execute($updatesql, array($data->timeshift, $data->courseid));
 
         $status[] = array('component' => $componentstr, 'item' => get_string('datechanged'), 'error' => false);
-    }
-
-    if (!empty($data->reset_logs)) {
-        $DB->delete_records('log', array('course' => $data->courseid));
-        $status[] = array('component' => $componentstr, 'item' => get_string('deletelogs'), 'error' => false);
     }
 
     if (!empty($data->reset_events)) {
@@ -5764,6 +5816,14 @@ function email_to_user($user, $from, $subject, $messagetext, $messagehtml = '', 
         $mail->Sender = $supportuser->email;
     }
 
+    if (!empty($CFG->emailonlyfromnoreplyaddress)) {
+        $usetrueaddress = false;
+        if (empty($replyto) && $from->maildisplay) {
+            $replyto = $from->email;
+            $replytoname = fullname($from);
+        }
+    }
+
     if (is_string($from)) { // So we can pass whatever we want if there is need.
         $mail->From     = $CFG->noreplyaddress;
         $mail->FromName = $from;
@@ -5935,17 +5995,7 @@ function setnew_password_and_mail($user, $fasthash = false) {
 
     $newpassword = generate_password();
 
-    $hashedpassword = hash_internal_user_password($newpassword, $fasthash);
-    $DB->set_field('user', 'password', $hashedpassword, array('id' => $user->id));
-    $user->password = $hashedpassword;
-
-    // Trigger event.
-    $event = \core\event\user_updated::create(array(
-        'objectid' => $user->id,
-        'context' => context_user::instance($user->id)
-    ));
-    $event->add_record_snapshot('user', $user);
-    $event->trigger();
+    update_internal_user_password($user, $newpassword, $fasthash);
 
     $a = new stdClass();
     $a->firstname   = fullname($user, true);
@@ -6622,7 +6672,14 @@ function clean_filename($string) {
 function current_language() {
     global $CFG, $USER, $SESSION, $COURSE;
 
-    if (!empty($COURSE->id) and $COURSE->id != SITEID and !empty($COURSE->lang)) {
+    if (!empty($SESSION->forcelang)) {
+        // Allows overriding course-forced language (useful for admins to check
+        // issues in courses whose language they don't understand).
+        // Also used by some code to temporarily get language-related information in a
+        // specific language (see force_current_language()).
+        $return = $SESSION->forcelang;
+
+    } else if (!empty($COURSE->id) and $COURSE->id != SITEID and !empty($COURSE->lang)) {
         // Course language can override all other settings for this page.
         $return = $COURSE->lang;
 
@@ -6654,14 +6711,10 @@ function current_language() {
  * @return string
  */
 function get_parent_language($lang=null) {
-    global $COURSE, $SESSION;
 
     // Let's hack around the current language.
     if (!empty($lang)) {
-        $oldcourselang  = empty($COURSE->lang) ? '' : $COURSE->lang;
-        $oldsessionlang = empty($SESSION->lang) ? '' : $SESSION->lang;
-        $COURSE->lang  = '';
-        $SESSION->lang = $lang;
+        $oldforcelang = force_current_language($lang);
     }
 
     $parentlang = get_string('parentlanguage', 'langconfig');
@@ -6671,11 +6724,32 @@ function get_parent_language($lang=null) {
 
     // Let's hack around the current language.
     if (!empty($lang)) {
-        $COURSE->lang  = $oldcourselang;
-        $SESSION->lang = $oldsessionlang;
+        force_current_language($oldforcelang);
     }
 
     return $parentlang;
+}
+
+/**
+ * Force the current language to get strings and dates localised in the given language.
+ *
+ * After calling this function, all strings will be provided in the given language
+ * until this function is called again, or equivalent code is run.
+ *
+ * @param string $language
+ * @return string previous $SESSION->forcelang value
+ */
+function force_current_language($language) {
+    global $SESSION;
+    $sessionforcelang = isset($SESSION->forcelang) ? $SESSION->forcelang : '';
+    if ($language !== $sessionforcelang) {
+        // Seting forcelang to null or an empty string disables it's effect.
+        if (empty($language) || get_string_manager()->translation_exists($language, false)) {
+            $SESSION->forcelang = $language;
+            moodle_setlocale();
+        }
+    }
+    return $sessionforcelang;
 }
 
 /**
@@ -7604,7 +7678,18 @@ function moodle_setlocale($locale='') {
         $messages= setlocale (LC_MESSAGES, 0);
     }
     // Set locale to all.
-    setlocale (LC_ALL, $currentlocale);
+    $result = setlocale (LC_ALL, $currentlocale);
+    // If setting of locale fails try the other utf8 or utf-8 variant,
+    // some operating systems support both (Debian), others just one (OSX).
+    if ($result === false) {
+        if (stripos($currentlocale, '.UTF-8') !== false) {
+            $newlocale = str_ireplace('.UTF-8', '.UTF8', $currentlocale);
+            setlocale (LC_ALL, $newlocale);
+        } else if (stripos($currentlocale, '.UTF8') !== false) {
+            $newlocale = str_ireplace('.UTF8', '.UTF-8', $currentlocale);
+            setlocale (LC_ALL, $newlocale);
+        }
+    }
     // Set old values.
     setlocale (LC_MONETARY, $monetary);
     setlocale (LC_NUMERIC, $numeric);
@@ -7628,7 +7713,16 @@ function moodle_setlocale($locale='') {
  */
 function count_words($string) {
     $string = strip_tags($string);
-    return count(preg_split("/\w\b/", $string)) - 1;
+    // Decode HTML entities.
+    $string = html_entity_decode($string);
+    // Replace underscores (which are classed as word characters) with spaces.
+    $string = preg_replace('/_/u', ' ', $string);
+    // Remove any characters that shouldn't be treated as word boundaries.
+    $string = preg_replace('/[\'’-]/u', '', $string);
+    // Remove dots and commas from within numbers only.
+    $string = preg_replace('/([0-9])[.,]([0-9])/u', '$1$2', $string);
+
+    return count(preg_split('/\w\b/u', $string)) - 1;
 }
 
 /**
@@ -8663,17 +8757,19 @@ function message_popup_window() {
 
     // A quick query to check whether the user has new messages.
     $messagecount = $DB->count_records('message', array('useridto' => $USER->id));
-    if ($messagecount<1) {
+    if ($messagecount < 1) {
         return;
     }
 
-    // Got unread messages so now do another query that joins with the user table.
+    // There are unread messages so now do a more complex but slower query.
     $namefields = get_all_user_name_fields(true, 'u');
-    $messagesql = "SELECT m.id, m.smallmessage, m.fullmessageformat, m.notification, $namefields
+    $messagesql = "SELECT m.id, m.smallmessage, m.fullmessageformat, m.notification, m.useridto, m.useridfrom, $namefields, c.blocked
                      FROM {message} m
                      JOIN {message_working} mw ON m.id=mw.unreadmessageid
                      JOIN {message_processors} p ON mw.processorid=p.id
                      JOIN {user} u ON m.useridfrom=u.id
+                     LEFT JOIN {message_contacts} c ON c.contactid = m.useridfrom
+                                                   AND c.userid = m.useridto
                     WHERE m.useridto = :userid
                       AND p.name='popup'";
 
@@ -8686,46 +8782,18 @@ function message_popup_window() {
 
     $messageusers = $DB->get_records_sql($messagesql, array('userid' => $USER->id, 'lastpopuptime' => $USER->message_lastpopup));
 
-    // If we have new messages to notify the user about.
-    if (!empty($messageusers)) {
-
-        $strmessages = '';
-        if (count($messageusers)>1) {
-            $strmessages = get_string('unreadnewmessages', 'message', count($messageusers));
+    $validmessages = 0;
+    foreach($messageusers as $message) {
+        if ($message->blocked) {
+            // Message is from a user who has since been blocked so just mark it read.
+            message_mark_message_read($message, time());
         } else {
-            $messageusers = reset($messageusers);
-
-            // Show who the message is from if its not a notification.
-            if (!$messageusers->notification) {
-                $strmessages = get_string('unreadnewmessage', 'message', fullname($messageusers) );
-            }
-
-            // Try to display the small version of the message.
-            $smallmessage = null;
-            if (!empty($messageusers->smallmessage)) {
-                // Display the first 200 chars of the message in the popup.
-                $smallmessage = null;
-                if (core_text::strlen($messageusers->smallmessage) > 200) {
-                    $smallmessage = core_text::substr($messageusers->smallmessage, 0, 200).'...';
-                } else {
-                    $smallmessage = $messageusers->smallmessage;
-                }
-
-                // Prevent html symbols being displayed.
-                if ($messageusers->fullmessageformat == FORMAT_HTML) {
-                    $smallmessage = html_to_text($smallmessage);
-                } else {
-                    $smallmessage = s($smallmessage);
-                }
-            } else if ($messageusers->notification) {
-                // Its a notification with no smallmessage so just say they have a notification.
-                $smallmessage = get_string('unreadnewnotification', 'message');
-            }
-            if (!empty($smallmessage)) {
-                $strmessages .= '<div id="usermessage">'.s($smallmessage).'</div>';
-            }
+            $validmessages++;
         }
+    }
 
+    if ($validmessages > 0) {
+        $strmessages = get_string('unreadnewmessages', 'message', $validmessages);
         $strgomessage = get_string('gotomessages', 'message');
         $strstaymessage = get_string('ignore', 'admin');
 
@@ -8856,35 +8924,6 @@ function get_performance_info() {
         foreach ($filterinfo as $key => $value) {
             $info['html'] .= "<span class='$key'>$nicenames[$key]: $value </span> ";
             $info['txt'] .= "$key: $value ";
-        }
-    }
-
-    $jsmodules = $PAGE->requires->get_loaded_modules();
-    if ($jsmodules) {
-        $yuicount = 0;
-        $othercount = 0;
-        $details = '';
-        foreach ($jsmodules as $module => $backtraces) {
-            if (strpos($module, 'yui') === 0) {
-                $yuicount += 1;
-            } else {
-                $othercount += 1;
-            }
-            if (!empty($CFG->yuimoduledebug)) {
-                // Hidden feature for developers working on YUI module infrastructure.
-                $details .= "<div class='yui-module'><p>$module</p>";
-                foreach ($backtraces as $backtrace) {
-                    $details .= "<div class='backtrace'>$backtrace</div>";
-                }
-                $details .= '</div>';
-            }
-        }
-        $info['html'] .= "<span class='includedyuimodules'>Included YUI modules: $yuicount</span> ";
-        $info['txt'] .= "includedyuimodules: $yuicount ";
-        $info['html'] .= "<span class='includedjsmodules'>Other JavaScript modules: $othercount</span> ";
-        $info['txt'] .= "includedjsmodules: $othercount ";
-        if ($details) {
-            $info['html'] .= '<div id="yui-module-debug" class="notifytiny">'.$details.'</div>';
         }
     }
 

@@ -102,10 +102,10 @@ class behat_course extends behat_base {
             // Adding a forced wait until editors are loaded as otherwise selenium sometimes tries clicks on the
             // format field when the editor is being rendered and the click misses the field coordinates.
             $steps[] = new Given('I expand all fieldsets');
-            $steps[] = new Given('I select "' . $formatvalue . '" from "' . $formatfield . '"');
-            $steps[] = new Given('I fill the moodle form with:', $table);
+            $steps[] = new Given('I set the field "' . $formatfield . '" to "' . $formatvalue . '"');
+            $steps[] = new Given('I set the following fields to these values:', $table);
         } else {
-            $steps[] = new Given('I fill the moodle form with:', $table);
+            $steps[] = new Given('I set the following fields to these values:', $table);
         }
 
         $steps[] = new Given('I press "' . get_string('savechanges') . '"');
@@ -122,9 +122,7 @@ class behat_course extends behat_base {
     public function i_go_to_the_courses_management_page() {
         return array(
             new Given('I am on homepage'),
-            new Given('I expand "' . get_string('administrationsite') . '" node'),
-            new Given('I expand "' . get_string('courses', 'admin') . '" node'),
-            new Given('I follow "' . get_string('coursemgmt', 'admin') . '"')
+            new Given('I navigate to "' . get_string('coursemgmt', 'admin') . '" node in "' . get_string('administrationsite') . ' > ' . get_string('courses', 'admin') . '"')
         );
     }
 
@@ -141,7 +139,7 @@ class behat_course extends behat_base {
 
         return array(
             new Given('I add a "' . $this->escape($activity) . '" to section "' . $this->escape($section) . '"'),
-            new Given('I fill the moodle form with:', $data),
+            new Given('I set the following fields to these values:', $data),
             new Given('I press "' . get_string('savechangesandreturntocourse') . '"')
         );
     }
@@ -288,7 +286,7 @@ class behat_course extends behat_base {
 
         return array(
             new Given('I edit the section "' . $sectionnumber . '"'),
-            new Given('I fill the moodle form with:', $data),
+            new Given('I set the following fields to these values:', $data),
             new Given('I press "' . get_string('savechanges') . '"')
         );
     }
@@ -498,7 +496,7 @@ class behat_course extends behat_base {
 
         if ($this->is_course_editor()) {
 
-            // The activity should exists.
+            // The activity should exist.
             $activitynode = $this->get_activity_node($activityname);
 
             // Should be hidden.
@@ -511,7 +509,7 @@ class behat_course extends behat_base {
 
         } else {
 
-            // It should not exists at all.
+            // It should not exist at all.
             try {
                 $this->find_link($activityname);
                 throw new ExpectationException('The "' . $activityname . '" should not appear');
@@ -577,7 +575,7 @@ class behat_course extends behat_base {
         $activity = $this->escape($activityname);
         return array(
             new Given('I click on "' . get_string('edittitle') . '" "link" in the "' . $activity .'" activity'),
-            new Given('I fill in "title" with "' . $this->escape($newactivityname) . chr(10) . '"')
+            new Given('I set the field "title" to "' . $this->escape($newactivityname) . chr(10) . '"')
         );
     }
 
@@ -702,26 +700,20 @@ class behat_course extends behat_base {
 
         $deletestring = get_string('delete');
 
+        $steps = array(
+            new Given('I click on "' . $this->escape($deletestring) . '" "link" in the "' . $this->escape($activityname) . '" activity')
+        );
+
         // JS enabled.
         // Not using chain steps here because the exceptions catcher have problems detecting
         // JS modal windows and avoiding interacting them at the same time.
         if ($this->running_javascript()) {
-
-            $element = $this->get_activity_element($deletestring, 'link', $activityname);
-            $element->click();
-
-            $this->getSession()->getDriver()->getWebDriverSession()->accept_alert();
-
+            $steps[] = new Given('I click on "' . get_string('yes') . '" "button" in the "Confirm" "dialogue"');
         } else {
-
-            // With JS disabled.
-            $steps = array(
-                new Given('I click on "' . $this->escape($deletestring) . '" "link" in the "' . $this->escape($activityname) . '" activity'),
-                new Given('I press "' . get_string('yes') . '"')
-            );
-
-            return $steps;
+            $steps[] = new Given('I press "' . get_string('yes') . '"');
         }
+
+        return $steps;
     }
 
     /**
@@ -789,7 +781,7 @@ class behat_course extends behat_base {
             $steps[] = new Given('I press "' . get_string('continue') .'"');
             $steps[] = new Given('I press "' . get_string('duplicatecontedit') . '"');
         }
-        $steps[] = new Given('I fill the moodle form with:', $data);
+        $steps[] = new Given('I set the following fields to these values:', $data);
         $steps[] = new Given('I press "' . get_string('savechangesandreturntocourse') . '"');
         return $steps;
     }
@@ -823,7 +815,7 @@ class behat_course extends behat_base {
     /**
      * Clicks on the specified element of the activity. You should be in the course page with editing mode turned on.
      *
-     * @Given /^I click on "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" in the "(?P<activity_name_string>[^"]*)" activity$/
+     * @Given /^I click on "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>(?:[^"]|\\")*)" in the "(?P<activity_name_string>(?:[^"]|\\")*)" activity$/
      * @param string $element
      * @param string $selectortype
      * @param string $activityname
@@ -1106,7 +1098,7 @@ class behat_course extends behat_base {
     /**
      * Clicks on a category in the management interface.
      *
-     * @Given /^I click on category "(?P<name>[^"]*)" in the management interface$/
+     * @Given /^I click on category "(?P<name_string>(?:[^"]|\\")*)" in the management interface$/
      * @param string $name
      */
     public function i_click_on_category_in_the_management_interface($name) {
@@ -1117,7 +1109,7 @@ class behat_course extends behat_base {
     /**
      * Clicks on a course in the management interface.
      *
-     * @Given /^I click on course "(?P<name>[^"]*)" in the management interface$/
+     * @Given /^I click on course "(?P<name_string>(?:[^"]|\\")*)" in the management interface$/
      * @param string $name
      */
     public function i_click_on_course_in_the_management_interface($name) {
@@ -1128,7 +1120,7 @@ class behat_course extends behat_base {
     /**
      * Clicks on a category checkbox in the management interface, if not checked.
      *
-     * @Given /^I select category "(?P<name>[^"]*)" in the management interface$/
+     * @Given /^I select category "(?P<name_string>(?:[^"]|\\")*)" in the management interface$/
      * @param string $name
      */
     public function i_select_category_in_the_management_interface($name) {
@@ -1142,7 +1134,7 @@ class behat_course extends behat_base {
     /**
      * Clicks on a category checkbox in the management interface, if checked.
      *
-     * @Given /^I unselect category "(?P<name>[^"]*)" in the management interface$/
+     * @Given /^I unselect category "(?P<name_string>(?:[^"]|\\")*)" in the management interface$/
      * @param string $name
      */
     public function i_unselect_category_in_the_management_interface($name) {
@@ -1156,7 +1148,7 @@ class behat_course extends behat_base {
     /**
      * Clicks course checkbox in the management interface, if not checked.
      *
-     * @Given /^I select course "(?P<name>[^"]*)" in the management interface$/
+     * @Given /^I select course "(?P<name_string>(?:[^"]|\\")*)" in the management interface$/
      * @param string $name
      */
     public function i_select_course_in_the_management_interface($name) {
@@ -1170,7 +1162,7 @@ class behat_course extends behat_base {
     /**
      * Clicks course checkbox in the management interface, if checked.
      *
-     * @Given /^I unselect course "(?P<name>[^"]*)" in the management interface$/
+     * @Given /^I unselect course "(?P<name_string>(?:[^"]|\\")*)" in the management interface$/
      * @param string $name
      */
     public function i_unselect_course_in_the_management_interface($name) {
@@ -1184,14 +1176,14 @@ class behat_course extends behat_base {
     /**
      * Move selected categories to top level in the management interface.
      *
-     * @Given /^I move category "(?P<name>[^"]*)" to top level in the management interface$/
+     * @Given /^I move category "(?P<name_string>(?:[^"]|\\")*)" to top level in the management interface$/
      * @param string $name
      * @return Given[]
      */
     public function i_move_category_to_top_level_in_the_management_interface($name) {
         $this->i_select_category_in_the_management_interface($name);
         return array(
-            new Given('I select "' .  coursecat::get(0)->get_formatted_name() . '" from "menumovecategoriesto"'),
+            new Given('I set the field "menumovecategoriesto" to "' .  coursecat::get(0)->get_formatted_name() . '"'),
             new Given('I press "bulkmovecategories"'),
         );
     }
@@ -1199,7 +1191,7 @@ class behat_course extends behat_base {
     /**
      * Checks that a category is a subcategory of specific category.
      *
-     * @Given /^I should see category "(?P<subcatidnumber>[^"]*)" as subcategory of "(?P<catidnumber>[^"]*)" in the management interface$/
+     * @Given /^I should see category "(?P<subcatidnumber_string>(?:[^"]|\\")*)" as subcategory of "(?P<catidnumber_string>(?:[^"]|\\")*)" in the management interface$/
      * @throws ExpectationException
      * @param string $subcatidnumber
      * @param string $catidnumber
@@ -1215,7 +1207,7 @@ class behat_course extends behat_base {
     /**
      * Checks that a category is not a subcategory of specific category.
      *
-     * @Given /^I should not see category "(?P<subcatidnumber>[^"]*)" as subcategory of "(?P<catidnumber>[^"]*)" in the management interface$/
+     * @Given /^I should not see category "(?P<subcatidnumber_string>(?:[^"]|\\")*)" as subcategory of "(?P<catidnumber_string>(?:[^"]|\\")*)" in the management interface$/
      * @throws ExpectationException
      * @param string $subcatidnumber
      * @param string $catidnumber
@@ -1233,7 +1225,7 @@ class behat_course extends behat_base {
     /**
      * Click to expand a category revealing its sub categories within the management UI.
      *
-     * @Given /^I click to expand category "(?P<idnumber>[^"]*)" in the management interface$/
+     * @Given /^I click to expand category "(?P<idnumber_string>(?:[^"]|\\")*)" in the management interface$/
      * @param string $idnumber
      */
     public function i_click_to_expand_category_in_the_management_interface($idnumber) {
@@ -1246,7 +1238,7 @@ class behat_course extends behat_base {
     /**
      * Checks that a category within the management interface is visible.
      *
-     * @Given /^category in management listing should be visible "(?P<idnumber>[^"]*)"$/
+     * @Given /^category in management listing should be visible "(?P<idnumber_string>(?:[^"]|\\")*)"$/
      * @param string $idnumber
      */
     public function category_in_management_listing_should_be_visible($idnumber) {
@@ -1259,7 +1251,7 @@ class behat_course extends behat_base {
     /**
      * Checks that a category within the management interface is dimmed.
      *
-     * @Given /^category in management listing should be dimmed "(?P<idnumber>[^"]*)"$/
+     * @Given /^category in management listing should be dimmed "(?P<idnumber_string>(?:[^"]|\\")*)"$/
      * @param string $idnumber
      */
     public function category_in_management_listing_should_be_dimmed($idnumber) {
@@ -1272,7 +1264,7 @@ class behat_course extends behat_base {
     /**
      * Checks that a course within the management interface is visible.
      *
-     * @Given /^course in management listing should be visible "(?P<idnumber>[^"]*)"$/
+     * @Given /^course in management listing should be visible "(?P<idnumber_string>(?:[^"]|\\")*)"$/
      * @param string $idnumber
      */
     public function course_in_management_listing_should_be_visible($idnumber) {
@@ -1285,7 +1277,7 @@ class behat_course extends behat_base {
     /**
      * Checks that a course within the management interface is dimmed.
      *
-     * @Given /^course in management listing should be dimmed "(?P<idnumber>[^"]*)"$/
+     * @Given /^course in management listing should be dimmed "(?P<idnumber_string>(?:[^"]|\\")*)"$/
      * @param string $idnumber
      */
     public function course_in_management_listing_should_be_dimmed($idnumber) {
@@ -1300,7 +1292,7 @@ class behat_course extends behat_base {
      *
      * If it was visible it will be hidden. If it is hidden it will be made visible.
      *
-     * @Given /^I toggle visibility of course "(?P<idnumber>[^"]*)" in management listing$/
+     * @Given /^I toggle visibility of course "(?P<idnumber_string>(?:[^"]|\\")*)" in management listing$/
      * @param string $idnumber
      */
     public function i_toggle_visibility_of_course_in_management_listing($idnumber) {
@@ -1321,7 +1313,7 @@ class behat_course extends behat_base {
      *
      * If it was visible it will be hidden. If it is hidden it will be made visible.
      *
-     * @Given /^I toggle visibility of category "(?P<idnumber>[^"]*)" in management listing$/
+     * @Given /^I toggle visibility of category "(?P<idnumber_string>(?:[^"]|\\")*)" in management listing$/
      */
     public function i_toggle_visibility_of_category_in_management_listing($idnumber) {
         $id = $this->get_category_id($idnumber);
@@ -1339,7 +1331,7 @@ class behat_course extends behat_base {
     /**
      * Moves a category displayed in the management interface up or down one place.
      *
-     * @Given /^I click to move category "(?P<idnumber>[^"]*)" (?P<direction>up|down) one$/
+     * @Given /^I click to move category "(?P<idnumber_string>(?:[^"]|\\")*)" (?P<direction>up|down) one$/
      *
      * @param string $idnumber The category idnumber
      * @param string $direction The direction to move in, either up or down
@@ -1352,7 +1344,7 @@ class behat_course extends behat_base {
     /**
      * Moves a course displayed in the management interface up or down one place.
      *
-     * @Given /^I click to move course "(?P<idnumber>[^"]*)" (?P<direction>up|down) one$/
+     * @Given /^I click to move course "(?P<idnumber_string>(?:[^"]|\\")*)" (?P<direction>up|down) one$/
      *
      * @param string $idnumber The course idnumber
      * @param string $direction The direction to move in, either up or down
@@ -1402,7 +1394,7 @@ class behat_course extends behat_base {
     /**
      * Check that one course appears before another in the course category management listings.
      *
-     * @Given /^I should see course listing "(?P<preceedingcourse>[^"]*)" before "(?P<followingcourse>[^"]*)"$/
+     * @Given /^I should see course listing "(?P<preceedingcourse_string>(?:[^"]|\\")*)" before "(?P<followingcourse_string>(?:[^"]|\\")*)"$/
      *
      * @param string $preceedingcourse The first course to find
      * @param string $followingcourse The second course to find (should be AFTER the first course)
@@ -1419,7 +1411,7 @@ class behat_course extends behat_base {
     /**
      * Check that one category appears before another in the course category management listings.
      *
-     * @Given /^I should see category listing "(?P<preceedingcategory>[^"]*)" before "(?P<followingcategory>[^"]*)"$/
+     * @Given /^I should see category listing "(?P<preceedingcategory_string>(?:[^"]|\\")*)" before "(?P<followingcategory_string>(?:[^"]|\\")*)"$/
      *
      * @param string $preceedingcategory The first category to find
      * @param string $followingcategory The second category to find (should be after the first category)
@@ -1436,7 +1428,7 @@ class behat_course extends behat_base {
     /**
      * Checks that we are on the course management page that we expect to be on and that no course has been selected.
      *
-     * @Given /^I should see the "(?P<mode>[^"]*)" management page$/
+     * @Given /^I should see the "(?P<mode_string>(?:[^"]|\\")*)" management page$/
      * @param string $mode The mode to expected. One of 'Courses', 'Course categories' or 'Course categories and courses'
      * @return Given[]
      */
@@ -1446,41 +1438,41 @@ class behat_course extends behat_base {
         );
         switch ($mode) {
             case "Courses":
-                $return[] = new Given('"#category-listing" "css_element" should not exists');
-                $return[] = new Given('"#course-listing" "css_element" should exists');
+                $return[] = new Given('"#category-listing" "css_element" should not exist');
+                $return[] = new Given('"#course-listing" "css_element" should exist');
                 break;
             case "Course categories":
-                $return[] = new Given('"#category-listing" "css_element" should exists');
-                $return[] = new Given('"#course-listing" "css_element" should not exists');
+                $return[] = new Given('"#category-listing" "css_element" should exist');
+                $return[] = new Given('"#course-listing" "css_element" should exist');
                 break;
             case "Courses categories and courses":
             default:
-                $return[] = new Given('"#category-listing" "css_element" should exists');
-                $return[] = new Given('"#course-listing" "css_element" should exists');
+                $return[] = new Given('"#category-listing" "css_element" should exist');
+                $return[] = new Given('"#course-listing" "css_element" should exist');
                 break;
         }
-        $return[] = new Given('"#course-detail" "css_element" should not exists');
+        $return[] = new Given('"#course-detail" "css_element" should not exist');
         return $return;
     }
 
     /**
      * Checks that we are on the course management page that we expect to be on and that a course has been selected.
      *
-     * @Given /^I should see the "(?P<mode>[^"]*)" management page with a course selected$/
+     * @Given /^I should see the "(?P<mode_string>(?:[^"]|\\")*)" management page with a course selected$/
      * @param string $mode The mode to expected. One of 'Courses', 'Course categories' or 'Course categories and courses'
      * @return Given[]
      */
     public function i_should_see_the_courses_management_page_with_a_course_selected($mode) {
         $return = $this->i_should_see_the_courses_management_page($mode);
         array_pop($return);
-        $return[] = new Given('"#course-detail" "css_element" should exists');
+        $return[] = new Given('"#course-detail" "css_element" should exist');
         return $return;
     }
 
     /**
      * Locates a course in the course category management interface and then triggers an action for it.
      *
-     * @Given /^I click on "(?P<action>[^"]*)" action for "(?P<name>[^"]*)" in management course listing$/
+     * @Given /^I click on "(?P<action_string>(?:[^"]|\\")*)" action for "(?P<name_string>(?:[^"]|\\")*)" in management course listing$/
      *
      * @param string $action The action to take. One of
      * @param string $name The name of the course as it is displayed in the management interface.
@@ -1493,7 +1485,7 @@ class behat_course extends behat_base {
     /**
      * Locates a category in the course category management interface and then triggers an action for it.
      *
-     * @Given /^I click on "(?P<action>[^"]*)" action for "(?P<name>[^"]*)" in management category listing$/
+     * @Given /^I click on "(?P<action_string>(?:[^"]|\\")*)" action for "(?P<name_string>(?:[^"]|\\")*)" in management category listing$/
      *
      * @param string $action The action to take. One of
      * @param string $name The name of the category as it is displayed in the management interface.
@@ -1554,7 +1546,7 @@ class behat_course extends behat_base {
     /**
      * Clicks on a category in the management interface.
      *
-     * @Given /^I click on "([^"]*)" category in the management category listing$/
+     * @Given /^I click on "(?P<categoryname_string>(?:[^"]|\\")*)" category in the management category listing$/
      * @param string $name The name of the category to click.
      */
     public function i_click_on_category_in_the_management_category_listing($name) {

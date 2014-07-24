@@ -91,13 +91,15 @@ function enrol_get_plugins($enabled) {
     }
 
     foreach ($plugins as $plugin=>$location) {
-        if (!file_exists("$location/lib.php")) {
-            continue;
-        }
-        include_once("$location/lib.php");
         $class = "enrol_{$plugin}_plugin";
         if (!class_exists($class)) {
-            continue;
+            if (!file_exists("$location/lib.php")) {
+                continue;
+            }
+            include_once("$location/lib.php");
+            if (!class_exists($class)) {
+                continue;
+            }
         }
 
         $result[$plugin] = new $class();
@@ -459,7 +461,7 @@ function enrol_add_course_navigation(navigation_node $coursenode, $course) {
      // Deal somehow with users that are not enrolled but still got a role somehow
     if ($course->id != SITEID) {
         //TODO, create some new UI for role assignments at course level
-        if (has_capability('moodle/role:assign', $coursecontext)) {
+        if (has_capability('moodle/course:reviewotherusers', $coursecontext)) {
             $url = new moodle_url('/enrol/otherusers.php', array('id'=>$course->id));
             $usersnode->add(get_string('notenrolledusers', 'enrol'), $url, navigation_node::TYPE_SETTING, null, 'otherusers', new pix_icon('i/assignroles', ''));
         }
@@ -1404,6 +1406,9 @@ abstract class enrol_plugin {
         $DB->update_record('user_enrolments', $ue);
         context_course::instance($instance->courseid)->mark_dirty(); // reset enrol caches
 
+        // Invalidate core_access cache for get_suspended_userids.
+        cache_helper::invalidate_by_definition('core', 'suspended_userids', array(), array($instance->courseid));
+
         // Trigger event.
         $event = \core\event\user_enrolment_updated::create(
                 array(
@@ -1535,11 +1540,25 @@ abstract class enrol_plugin {
     /**
      * Is it possible to delete enrol instance via standard UI?
      *
+     * @deprecated since Moodle 2.8 MDL-35864 - please use can_delete_instance() instead.
+     * @todo MDL-46479 This will be deleted in Moodle 3.0.
+     * @see class_name::can_delete_instance()
      * @param object $instance
      * @return bool
      */
     public function instance_deleteable($instance) {
-        return true;
+        debugging('Function enrol_plugin::instance_deleteable() is deprecated', DEBUG_DEVELOPER);
+        return $this->can_delete_instance($instance);
+    }
+
+    /**
+     * Is it possible to delete enrol instance via standard UI?
+     *
+     * @param object $instance
+     * @return bool
+     */
+    public function can_delete_instance($instance) {
+        return false;
     }
 
     /**
@@ -2146,16 +2165,11 @@ abstract class enrol_plugin {
      * @param progress_trace $trace
      */
     protected function notify_expiry_enrolled($user, $ue, progress_trace $trace) {
-        global $CFG, $SESSION;
+        global $CFG;
 
         $name = $this->get_name();
 
-        // Some nasty hackery to get strings and dates localised for target user.
-        $sessionlang = isset($SESSION->lang) ? $SESSION->lang : null;
-        if (get_string_manager()->translation_exists($user->lang, false)) {
-            $SESSION->lang = $user->lang;
-            moodle_setlocale();
-        }
+        $oldforcelang = force_current_language($user->lang);
 
         $enroller = $this->get_enroller($ue->enrolid);
         $context = context_course::instance($ue->courseid);
@@ -2189,10 +2203,7 @@ abstract class enrol_plugin {
             $trace->output("error notifying user $ue->userid that enrolment in course $ue->courseid expires on ".userdate($ue->timeend, '', $CFG->timezone), 1);
         }
 
-        if ($SESSION->lang !== $sessionlang) {
-            $SESSION->lang = $sessionlang;
-            moodle_setlocale();
-        }
+        force_current_language($oldforcelang);
     }
 
     /**
@@ -2207,7 +2218,7 @@ abstract class enrol_plugin {
      * @param progress_trace $trace
      */
     protected function notify_expiry_enroller($eid, $users, progress_trace $trace) {
-        global $DB, $SESSION;
+        global $DB;
 
         $name = $this->get_name();
 
@@ -2218,12 +2229,7 @@ abstract class enrol_plugin {
         $enroller = $this->get_enroller($instance->id);
         $admin = get_admin();
 
-        // Some nasty hackery to get strings and dates localised for target user.
-        $sessionlang = isset($SESSION->lang) ? $SESSION->lang : null;
-        if (get_string_manager()->translation_exists($enroller->lang, false)) {
-            $SESSION->lang = $enroller->lang;
-            moodle_setlocale();
-        }
+        $oldforcelang = force_current_language($enroller->lang);
 
         foreach($users as $key=>$info) {
             $users[$key] = '* '.$info['fullname'].' - '.userdate($info['timeend'], '', $enroller->timezone);
@@ -2258,10 +2264,7 @@ abstract class enrol_plugin {
             $trace->output("error notifying user $enroller->id about all expiring $name enrolments in course $instance->courseid", 1);
         }
 
-        if ($SESSION->lang !== $sessionlang) {
-            $SESSION->lang = $sessionlang;
-            moodle_setlocale();
-        }
+        force_current_language($oldforcelang);
     }
 
     /**

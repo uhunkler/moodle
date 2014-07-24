@@ -11,6 +11,7 @@ $temp = new admin_settingpage('systempaths', new lang_string('systempaths','admi
 $temp->add(new admin_setting_configexecutable('pathtodu', new lang_string('pathtodu', 'admin'), new lang_string('configpathtodu', 'admin'), ''));
 $temp->add(new admin_setting_configexecutable('aspellpath', new lang_string('aspellpath', 'admin'), new lang_string('edhelpaspellpath'), ''));
 $temp->add(new admin_setting_configexecutable('pathtodot', new lang_string('pathtodot', 'admin'), new lang_string('pathtodot_help', 'admin'), ''));
+$temp->add(new admin_setting_configexecutable('pathtogs', new lang_string('pathtogs', 'admin'), new lang_string('pathtogs_help', 'admin'), '/usr/bin/gs'));
 $ADMIN->add('server', $temp);
 
 
@@ -136,21 +137,6 @@ $temp->add(new admin_setting_configselect('deleteincompleteusers', new lang_stri
                                                                                                                                                                     72 => new lang_string('numdays', '', 3),
                                                                                                                                                                     48 => new lang_string('numdays', '', 2),
                                                                                                                                                                     24 => new lang_string('numdays', '', 1))));
-
-$temp->add(new admin_setting_configcheckbox('logguests', new lang_string('logguests', 'admin'),
-                                            new lang_string('logguests_help', 'admin'), 1));
-$temp->add(new admin_setting_configselect('loglifetime', new lang_string('loglifetime', 'admin'), new lang_string('configloglifetime', 'admin'), 0, array(0 => new lang_string('neverdeletelogs'),
-                                                                                                                                                1000 => new lang_string('numdays', '', 1000),
-                                                                                                                                                365 => new lang_string('numdays', '', 365),
-                                                                                                                                                180 => new lang_string('numdays', '', 180),
-                                                                                                                                                150 => new lang_string('numdays', '', 150),
-                                                                                                                                                120 => new lang_string('numdays', '', 120),
-                                                                                                                                                90 => new lang_string('numdays', '', 90),
-                                                                                                                                                60 => new lang_string('numdays', '', 60),
-                                                                                                                                                35 => new lang_string('numdays', '', 35),
-                                                                                                                                                10 => new lang_string('numdays', '', 10),
-                                                                                                                                                5 => new lang_string('numdays', '', 5),
-                                                                                                                                                2 => new lang_string('numdays', '', 2))));
 
 
 $temp->add(new admin_setting_configcheckbox('disablegradehistory', new lang_string('disablegradehistory', 'grades'),

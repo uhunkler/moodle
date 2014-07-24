@@ -110,6 +110,7 @@ class behat_hooks extends behat_base {
         // Now that we are MOODLE_INTERNAL.
         require_once(__DIR__ . '/../../behat/classes/behat_command.php');
         require_once(__DIR__ . '/../../behat/classes/behat_selectors.php');
+        require_once(__DIR__ . '/../../behat/classes/behat_context_helper.php');
         require_once(__DIR__ . '/../../behat/classes/util.php');
         require_once(__DIR__ . '/../../testing/classes/test_lock.php');
         require_once(__DIR__ . '/../../testing/classes/nasty_strings.php');
@@ -184,17 +185,15 @@ class behat_hooks extends behat_base {
         // We need the Mink session to do it and we do it only before the first scenario.
         if (self::is_first_scenario()) {
             behat_selectors::register_moodle_selectors($session);
+            behat_context_helper::set_session($session);
         }
 
         // Reset $SESSION.
-        $_SESSION = array();
-        $SESSION = new stdClass();
-        $_SESSION['SESSION'] =& $SESSION;
+        \core\session\manager::init_empty_session();
 
         behat_util::reset_database();
         behat_util::reset_dataroot();
 
-        purge_all_caches();
         accesslib_clear_all_caches(true);
 
         // Reset the nasty strings list used during the last test.
@@ -230,7 +229,8 @@ class behat_hooks extends behat_base {
 
             self::$initprocessesfinished = true;
         }
-
+        // Run all test with medium (1024x768) screen size, to avoid responsive problems.
+        $this->resize_window('medium');
     }
 
     /**
@@ -358,7 +358,7 @@ class behat_hooks extends behat_base {
      * This is used for content such as the DOM, and screenshots.
      *
      * @param StepEvent $event
-     * @param String $filetype The file suffix to use.
+     * @param String $filetype The file suffix to use. Limited to 4 chars.
      */
     protected function get_faildump_filename(StepEvent $event, $filetype) {
         global $CFG;
@@ -381,7 +381,11 @@ class behat_hooks extends behat_base {
         // The scenario title + the failed step text.
         // We want a i-am-the-scenario-title_i-am-the-failed-step.$filetype format.
         $filename = $event->getStep()->getParent()->getTitle() . '_' . $event->getStep()->getText();
-        $filename = preg_replace('/([^a-zA-Z0-9\_]+)/', '-', $filename) . '.' . $filetype;
+        $filename = preg_replace('/([^a-zA-Z0-9\_]+)/', '-', $filename);
+
+        // File name limited to 255 characters. Leaving 4 chars for the file
+        // extension as we allow .png for images and .html for DOM contents.
+        $filename = substr($filename, 0, 250) . '.' . $filetype;
 
         return array($dir, $filename);
     }
@@ -473,7 +477,11 @@ class behat_hooks extends behat_base {
             if ($errormsg = $this->getSession()->getPage()->find('xpath', $exceptionsxpath)) {
 
                 // Getting the debugging info and the backtrace.
-                $errorinfoboxes = $this->getSession()->getPage()->findAll('css', 'div.notifytiny');
+                $errorinfoboxes = $this->getSession()->getPage()->findAll('css', 'div.alert-error');
+                // If errorinfoboxes is empty, try find notifytiny (original) class.
+                if (empty($errorinfoboxes)) {
+                    $errorinfoboxes = $this->getSession()->getPage()->findAll('css', 'div.notifytiny');
+                }
                 $errorinfo = $this->get_debug_text($errorinfoboxes[0]->getHtml()) . "\n" .
                     $this->get_debug_text($errorinfoboxes[1]->getHtml());
 

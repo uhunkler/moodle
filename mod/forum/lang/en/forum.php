@@ -18,7 +18,7 @@
 /**
  * Strings for component 'forum', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   forum
+ * @package   mod_forum
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -79,6 +79,8 @@ $string['cannotupdatepost'] = 'You can not update this post';
 $string['cannotviewpostyet'] = 'You cannot read other students questions in this discussion yet because you haven\'t posted';
 $string['cannotviewusersposts'] = 'There are no posts made by this user that you are able to view.';
 $string['cleanreadtime'] = 'Mark old posts as read hour';
+$string['clicktounsubscribe'] = 'You are subscribed to this discussion. Click to unsubscribe.';
+$string['clicktosubscribe'] = 'Not subscribed. Click to subscribe.';
 $string['completiondiscussions'] = 'Student must create discussions:';
 $string['completiondiscussionsgroup'] = 'Require discussions';
 $string['completiondiscussionshelp'] = 'requiring discussions to complete';
@@ -121,11 +123,19 @@ $string['digestmailsubject'] = '{$a}: forum digest';
 $string['digestmailtime'] = 'Hour to send digest emails';
 $string['digestsentusers'] = 'Email digests successfully sent to {$a} users.';
 $string['disallowsubscribe'] = 'Subscriptions not allowed';
+$string['disallowsubscription'] = 'Subscription';
+$string['disallowsubscription_help'] = 'This forum has been configured so that you cannot subscribe to discussions.';
 $string['disallowsubscribeteacher'] = 'Subscriptions not allowed (except for teachers)';
 $string['discussion'] = 'Discussion';
 $string['discussionmoved'] = 'This discussion has been moved to \'{$a}\'.';
 $string['discussionmovedpost'] = 'This discussion has been moved to <a href="{$a->discusshref}">here</a> in the forum <a href="{$a->forumhref}">{$a->forumname}</a>';
 $string['discussionname'] = 'Discussion name';
+$string['discussionnownotsubscribed'] = '{$a->name} will NOT be notified of new posts in \'{$a->name}\' of \'{$a->forum}\'';
+$string['discussionnowsubscribed'] = '{$a->name} will be notified of new posts in \'{$a->name}\' of \'{$a->forum}\'';
+$string['discussionsubscribestop'] = 'I don\'t want email copies of posts to this discussion';
+$string['discussionsubscribestart'] = 'Send me email copies of posts to this discussion';
+$string['discussionsubscription'] = 'Discussion subscription';
+$string['discussionsubscription_help'] = 'Subscribing to a discussion means you will receive notifications of new posts to that discussion.';
 $string['discussions'] = 'Discussions';
 $string['discussionsstartedby'] = 'Discussions started by {$a}';
 $string['discussionsstartedbyrecent'] = 'Discussions recently started by {$a}';
@@ -144,6 +154,23 @@ $string['edit'] = 'Edit';
 $string['editedby'] = 'Edited by {$a->name} - original submission {$a->date}';
 $string['editedpostupdated'] = '{$a}\'s post was updated';
 $string['editing'] = 'Editing';
+$string['eventcoursesearched'] = 'Course searched';
+$string['eventdiscussioncreated'] = 'Discussion created';
+$string['eventdiscussionupdated'] = 'Discussion updated';
+$string['eventdiscussiondeleted'] = 'Discussion deleted';
+$string['eventdiscussionmoved'] = 'Discussion moved';
+$string['eventdiscussionviewed'] = 'Discussion viewed';
+$string['eventdiscussionsubscriptioncreated'] = 'Discussion subscription created';
+$string['eventdiscussionsubscriptiondeleted'] = 'Discussion subscription deleted';
+$string['eventuserreportviewed'] = 'User report viewed';
+$string['eventpostcreated'] = 'Post created';
+$string['eventpostdeleted'] = 'Post deleted';
+$string['eventpostupdated'] = 'Post updated';
+$string['eventreadtrackingdisabled'] = 'Read tracking disabled';
+$string['eventreadtrackingenabled'] = 'Read tracking enabled';
+$string['eventsubscribersviewed'] = 'Subscribers viewed';
+$string['eventsubscriptioncreated'] = 'Subscription created';
+$string['eventsubscriptiondeleted'] = 'Subscription deleted';
 $string['emaildigestcompleteshort'] = 'Complete posts';
 $string['emaildigestdefault'] = 'Default ({$a})';
 $string['emaildigestoffshort'] = 'No digest';
@@ -166,7 +193,7 @@ $string['erroremptymessage'] = 'Post message cannot be empty';
 $string['erroremptysubject'] = 'Post subject cannot be empty.';
 $string['errorenrolmentrequired'] = 'You must be enrolled in this course to access this content';
 $string['errorwhiledelete'] = 'An error occurred while deleting record.';
-$string['event_assessable_uploaded'] = 'Some content has been posted.';
+$string['eventassessableuploaded'] = 'Some content has been posted.';
 $string['everyonecanchoose'] = 'Everyone can choose to be subscribed';
 $string['everyonecannowchoose'] = 'Everyone can now choose to be subscribed';
 $string['everyoneisnowsubscribed'] = 'Everyone is now subscribed to this forum';
@@ -175,7 +202,8 @@ $string['existingsubscribers'] = 'Existing subscribers';
 $string['exportdiscussion'] = 'Export whole discussion';
 $string['forcedreadtracking'] = 'Allow forced read tracking';
 $string['forcedreadtracking_desc'] = 'Allows forums to be set to forced read tracking. Will result in decreased performance for some users, particularly on courses with many forums and posts. When off, any forums previously set to Forced are treated as optional.';
-$string['forcessubscribe'] = 'This forum forces everyone to be subscribed';
+$string['forcesubscribed_help'] = 'This forum has been configured so that you cannot unsubscribe from discussions.';
+$string['forcesubscribed'] = 'This forum forces everyone to be subscribed';
 $string['forum'] = 'Forum';
 $string['forum:addinstance'] = 'Add a new forum';
 $string['forum:addnews'] = 'Add news';
@@ -324,9 +352,6 @@ $string['numposts'] = '{$a} posts';
 $string['olderdiscussions'] = 'Older discussions';
 $string['oldertopics'] = 'Older topics';
 $string['oldpostdays'] = 'Read after days';
-$string['openmode0'] = 'No discussions, no replies';
-$string['openmode1'] = 'No discussions, but replies are allowed';
-$string['openmode2'] = 'Discussions and replies are allowed';
 $string['overviewnumpostssince'] = '{$a} posts since last login';
 $string['overviewnumunread'] = '{$a} total unread';
 $string['page-mod-forum-x'] = 'Any forum module page';
@@ -345,6 +370,7 @@ $string['postmailinfo'] = 'This is a copy of a message posted on the {$a} websit
 
 To reply click on this link:';
 $string['postmailnow'] = '<p>This post will be mailed out immediately to all forum subscribers.</p>';
+$string['postmailsubject'] = '{$a->courseshortname}: {$a->subject}';
 $string['postrating1'] = 'Mostly separate knowing';
 $string['postrating2'] = 'Separate and connected';
 $string['postrating3'] = 'Mostly connected knowing';

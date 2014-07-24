@@ -28,8 +28,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * create the temp dir where backup/restore will happen,
- * delete old directories and create temp ids table
+ * Create the temp dir where backup/restore will happen and create temp ids table.
  */
 class create_and_clean_temp_stuff extends backup_execution_step {
 
@@ -38,7 +37,6 @@ class create_and_clean_temp_stuff extends backup_execution_step {
         $progress->start_progress('Deleting backup directories');
         backup_helper::check_and_create_backup_dir($this->get_backupid());// Create backup temp dir
         backup_helper::clear_backup_dir($this->get_backupid(), $progress);           // Empty temp dir, just in case
-        backup_helper::delete_old_backup_dirs(time() - (4 * 60 * 60), $progress);    // Delete > 4 hours temp dirs
         backup_controller_dbops::drop_backup_ids_temp_table($this->get_backupid()); // Drop ids temp table
         backup_controller_dbops::create_backup_ids_temp_table($this->get_backupid()); // Create ids temp table
         $progress->end_progress();
@@ -46,11 +44,11 @@ class create_and_clean_temp_stuff extends backup_execution_step {
 }
 
 /**
- * delete the temp dir used by backup/restore (conditionally),
- * delete old directories and drop tem ids table. Note we delete
+ * Delete the temp dir used by backup/restore (conditionally),
+ * delete old directories and drop temp ids table. Note we delete
  * the directory but not the corresponding log file that will be
- * there for, at least, 4 hours - only delete_old_backup_dirs()
- * deletes log files (for easier access to them)
+ * there for, at least, 1 week - only delete_old_backup_dirs() or cron
+ * deletes log files (for easier access to them).
  */
 class drop_and_clean_temp_stuff extends backup_execution_step {
 
@@ -60,7 +58,7 @@ class drop_and_clean_temp_stuff extends backup_execution_step {
         global $CFG;
 
         backup_controller_dbops::drop_backup_ids_temp_table($this->get_backupid()); // Drop ids temp table
-        backup_helper::delete_old_backup_dirs(time() - (4 * 60 * 60));              // Delete > 4 hours temp dirs
+        backup_helper::delete_old_backup_dirs(strtotime('-1 week'));                // Delete > 1 week old temp dirs.
         // Delete temp dir conditionally:
         // 1) If $CFG->keeptempdirectoriesonbackup is not enabled
         // 2) If backup temp dir deletion has been marked to be avoided
@@ -216,7 +214,7 @@ abstract class backup_questions_activity_structure_step extends backup_activity_
 
         $qas = new backup_nested_element($nameprefix . 'question_attempts');
         $qa = new backup_nested_element($nameprefix . 'question_attempt', array('id'), array(
-                'slot', 'behaviour', 'questionid', 'maxmark', 'minfraction', 'maxfraction',
+                'slot', 'behaviour', 'questionid', 'variant', 'maxmark', 'minfraction', 'maxfraction',
                 'flagged', 'questionsummary', 'rightanswer', 'responsesummary',
                 'timemodified'));
 
@@ -323,13 +321,7 @@ class backup_module_structure_step extends backup_structure_step {
             'added', 'score', 'indent', 'visible',
             'visibleold', 'groupmode', 'groupingid', 'groupmembersonly',
             'completion', 'completiongradeitemnumber', 'completionview', 'completionexpected',
-            'availablefrom', 'availableuntil', 'showavailability', 'showdescription'));
-
-        $availinfo = new backup_nested_element('availability_info');
-        $availability = new backup_nested_element('availability', array('id'), array(
-            'sourcecmid', 'requiredcompletion', 'gradeitemid', 'grademin', 'grademax'));
-        $availabilityfield = new backup_nested_element('availability_field', array('id'), array(
-            'userfield', 'customfield', 'customfieldtype', 'operator', 'value'));
+            'availability', 'showdescription'));
 
         // attach format plugin structure to $module element, only one allowed
         $this->add_plugin_structure('format', $module, false);
@@ -341,11 +333,6 @@ class backup_module_structure_step extends backup_structure_step {
         // attach local plugin structure to $module, multiple allowed
         $this->add_plugin_structure('local', $module, true);
 
-        // Define the tree
-        $module->add_child($availinfo);
-        $availinfo->add_child($availability);
-        $availinfo->add_child($availabilityfield);
-
         // Set the sources
         $concat = $DB->sql_concat("'mod_'", 'm.name');
         $module->set_source_sql("
@@ -355,13 +342,6 @@ class backup_module_structure_step extends backup_structure_step {
               JOIN {config_plugins} cp ON cp.plugin = $concat AND cp.name = 'version'
               JOIN {course_sections} s ON s.id = cm.section
              WHERE cm.id = ?", array(backup::VAR_MODID));
-
-        $availability->set_source_table('course_modules_availability', array('coursemoduleid' => backup::VAR_MODID));
-        $availabilityfield->set_source_sql('
-            SELECT cmaf.*, uif.shortname AS customfield, uif.datatype AS customfieldtype
-              FROM {course_modules_avail_fields} cmaf
-         LEFT JOIN {user_info_field} uif ON uif.id = cmaf.customfieldid
-             WHERE cmaf.coursemoduleid = ?', array(backup::VAR_MODID));
 
         // Define annotations
         $module->annotate_ids('grouping', 'groupingid');
@@ -383,7 +363,7 @@ class backup_section_structure_step extends backup_structure_step {
 
         $section = new backup_nested_element('section', array('id'), array(
                 'number', 'name', 'summary', 'summaryformat', 'sequence', 'visible',
-                'availablefrom', 'availableuntil', 'showavailability', 'groupingid'));
+                'availabilityjson'));
 
         // attach format plugin structure to $section element, only one allowed
         $this->add_plugin_structure('format', $section, false);
@@ -391,27 +371,13 @@ class backup_section_structure_step extends backup_structure_step {
         // attach local plugin structure to $section element, multiple allowed
         $this->add_plugin_structure('local', $section, true);
 
-        // Add nested elements for _availability table
-        $avail = new backup_nested_element('availability', array('id'), array(
-                'sourcecmid', 'requiredcompletion', 'gradeitemid', 'grademin', 'grademax'));
-        $availfield = new backup_nested_element('availability_field', array('id'), array(
-            'userfield', 'operator', 'value', 'customfield', 'customfieldtype'));
-        $section->add_child($avail);
-        $section->add_child($availfield);
-
         // Add nested elements for course_format_options table
         $formatoptions = new backup_nested_element('course_format_options', array('id'), array(
             'format', 'name', 'value'));
         $section->add_child($formatoptions);
 
-        // Define sources
+        // Define sources.
         $section->set_source_table('course_sections', array('id' => backup::VAR_SECTIONID));
-        $avail->set_source_table('course_sections_availability', array('coursesectionid' => backup::VAR_SECTIONID));
-        $availfield->set_source_sql('
-            SELECT csaf.*, uif.shortname AS customfield, uif.datatype AS customfieldtype
-              FROM {course_sections_avail_fields} csaf
-         LEFT JOIN {user_info_field} uif ON uif.id = csaf.customfieldid
-             WHERE csaf.coursesectionid = ?', array(backup::VAR_SECTIONID));
         $formatoptions->set_source_sql('SELECT cfo.id, cfo.format, cfo.name, cfo.value
               FROM {course} c
               JOIN {course_format_options} cfo
@@ -421,9 +387,11 @@ class backup_section_structure_step extends backup_structure_step {
 
         // Aliases
         $section->set_source_alias('section', 'number');
+        // The 'availability' field needs to be renamed because it clashes with
+        // the old nested element structure for availability data.
+        $section->set_source_alias('availability', 'availabilityjson');
 
         // Set annotations
-        $section->annotate_ids('grouping', 'groupingid');
         $section->annotate_files('course', 'section', 'id');
 
         return $section;

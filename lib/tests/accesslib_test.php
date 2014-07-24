@@ -385,7 +385,7 @@ class core_accesslib_testcase extends advanced_testcase {
         $permission = $DB->get_record('role_capabilities', array('contextid'=>$frontcontext->id, 'roleid'=>$student->id, 'capability'=>'moodle/backup:backupcourse'));
         $this->assertNotEmpty($permission);
         $this->assertEquals(CAP_ALLOW, $permission->permission);
-        $this->assertEquals(3, $permission->modifierid);
+        $this->assertEquals($user->id, $permission->modifierid);
 
         $result = assign_capability('moodle/backup:backupcourse', CAP_PROHIBIT, $student->id, $frontcontext->id, true);
         $this->assertTrue($result);
@@ -416,9 +416,10 @@ class core_accesslib_testcase extends advanced_testcase {
         $event = array_pop($events);
 
         $this->assertInstanceOf('\core\event\role_capabilities_updated', $event);
-        $expectedurl = new moodle_url('admin/roles/define.php', array('action' => 'view', 'roleid' => $student->id));
+        $expectedurl = new moodle_url('/admin/roles/define.php', array('action' => 'view', 'roleid' => $student->id));
         $this->assertEquals($expectedurl, $event->get_url());
         $this->assertEventLegacyLogData($expectedlegacylog, $event);
+        $this->assertEventContextNotUsed($event);
     }
 
     /**
@@ -1034,7 +1035,7 @@ class core_accesslib_testcase extends advanced_testcase {
         $teacherrole = $DB->get_record('role', array('shortname'=>'editingteacher'), '*', MUST_EXIST);
         $teacher = $this->getDataGenerator()->create_user();
         role_assign($teacherrole->id, $teacher->id, $coursecontext);
-        $teacherename = (object)array('roleid'=>$teacher->id, 'name'=>'Učitel', 'contextid'=>$coursecontext->id);
+        $teacherename = (object)array('roleid'=>$teacherrole->id, 'name'=>'Učitel', 'contextid'=>$coursecontext->id);
         $DB->insert_record('role_names', $teacherename);
 
         $studentrole = $DB->get_record('role', array('shortname'=>'student'), '*', MUST_EXIST);
@@ -1141,7 +1142,7 @@ class core_accesslib_testcase extends advanced_testcase {
         $teacherrole = $DB->get_record('role', array('shortname'=>'editingteacher'), '*', MUST_EXIST);
         $teacher = $this->getDataGenerator()->create_user();
         role_assign($teacherrole->id, $teacher->id, $coursecontext);
-        $teacherename = (object)array('roleid'=>$teacher->id, 'name'=>'Učitel', 'contextid'=>$coursecontext->id);
+        $teacherename = (object)array('roleid'=>$teacherrole->id, 'name'=>'Učitel', 'contextid'=>$coursecontext->id);
         $DB->insert_record('role_names', $teacherename);
 
         $contexts = $DB->get_records('context');
@@ -1199,10 +1200,10 @@ class core_accesslib_testcase extends advanced_testcase {
         $teacherrole = $DB->get_record('role', array('shortname'=>'editingteacher'), '*', MUST_EXIST);
         $teacher = $this->getDataGenerator()->create_user();
         role_assign($teacherrole->id, $teacher->id, $coursecontext);
-        $teacherename = (object)array('roleid'=>$teacher->id, 'name'=>'Učitel', 'contextid'=>$coursecontext->id);
+        $teacherename = (object)array('roleid'=>$teacherrole->id, 'name'=>'Učitel', 'contextid'=>$coursecontext->id);
         $DB->insert_record('role_names', $teacherename);
         $this->assertTrue($DB->record_exists('capabilities', array('name'=>'moodle/backup:backupcourse'))); // Any capability is ok.
-        assign_capability('moodle/backup:backupcourse', CAP_PROHIBIT, $teacher->id, $coursecontext->id);
+        assign_capability('moodle/backup:backupcourse', CAP_PROHIBIT, $teacherrole->id, $coursecontext->id);
 
         $studentrole = $DB->get_record('role', array('shortname'=>'student'), '*', MUST_EXIST);
         $student = $this->getDataGenerator()->create_user();
@@ -1795,7 +1796,7 @@ class core_accesslib_testcase extends advanced_testcase {
 
         // Add a resource to frontpage.
         $page = $generator->create_module('page', array('course'=>$SITE->id));
-        $testpages[] = $page->id;
+        $testpages[] = $page->cmid;
         $frontpagepagecontext = context_module::instance($page->cmid);
 
         // Add block to frontpage resource.
@@ -1838,7 +1839,7 @@ class core_accesslib_testcase extends advanced_testcase {
 
                 // Add a resource to each course.
                 $page = $generator->create_module('page', array('course'=>$course->id));
-                $testpages[] = $page->id;
+                $testpages[] = $page->cmid;
                 $modcontext = context_module::instance($page->cmid);
 
                 // Add block to each module.
@@ -2699,8 +2700,8 @@ class core_accesslib_testcase extends advanced_testcase {
         $this->assertEquals($url1, $url2);
         $this->assertInstanceOf('moodle_url', $url2);
 
-        $pagecm = get_coursemodule_from_instance('page', $testpages[7]);
-        $context = context_module::instance($pagecm->id);
+        $pagecm = get_coursemodule_from_id('page', $testpages[7]);
+        $context = context_module::instance($testpages[7]);
         $coursecontext1 = get_course_context($context);
         $this->assertDebuggingCalled('get_course_context() is deprecated, please use $context->get_course_context(true) instead.', DEBUG_DEVELOPER);
         $coursecontext2 = $context->get_course_context(true);

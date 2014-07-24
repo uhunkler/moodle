@@ -1,12 +1,12 @@
 /**
  * The activity chooser dialogue for courses.
  *
- * @moodle-course-modchooser
+ * @module moodle-course-modchooser
  */
 
 var CSS = {
     PAGECONTENT : 'body',
-    SECTION : 'li.section',
+    SECTION: null,
     SECTIONMODCHOOSER : 'span.section-modchooser-link',
     SITEMENU : 'div.block_site_main_menu',
     SITETOPIC : 'div.sitetopic'
@@ -26,10 +26,26 @@ var MODCHOOSER = function() {
 };
 
 Y.extend(MODCHOOSER, M.core.chooserdialogue, {
-    // The current section ID
+    /**
+     * The current section ID.
+     *
+     * @property sectionid
+     * @private
+     * @type Number
+     * @default null
+     */
     sectionid : null,
 
+    /**
+     * Set up the activity chooser.
+     *
+     * @method initializer
+     */
     initializer : function() {
+        var sectionclass = M.course.format.get_sectionwrapperclass();
+        if (sectionclass) {
+            CSS.SECTION = '.' + sectionclass;
+        }
         var dialogue = Y.one('.chooserdialoguebody');
         var header = Y.one('.choosertitle');
         var params = {};
@@ -42,12 +58,13 @@ Y.extend(MODCHOOSER, M.core.chooserdialogue, {
         // Catch the page toggle
         Y.all('.block_settings #settingsnav .type_course .modchoosertoggle a').on('click', this.toggle_mod_chooser, this);
     },
+
     /**
      * Update any section areas within the scope of the specified
      * selector with AJAX equivalents
      *
+     * @method setup_for_section
      * @param baseselector The selector to limit scope to
-     * @return void
      */
     setup_for_section : function(baseselector) {
         if (!baseselector) {
@@ -60,15 +77,26 @@ Y.extend(MODCHOOSER, M.core.chooserdialogue, {
         }, this);
 
         // Setup for standard course topics
-        Y.one(baseselector).all(CSS.SECTION).each(function(section) {
-            this._setup_for_section(section);
-        }, this);
+        if (CSS.SECTION) {
+            Y.one(baseselector).all(CSS.SECTION).each(function(section) {
+                this._setup_for_section(section);
+            }, this);
+        }
 
         // Setup for the block site menu
         Y.one(baseselector).all(CSS.SITEMENU).each(function(section) {
             this._setup_for_section(section);
         }, this);
     },
+
+    /**
+     * Update any section areas within the scope of the specified
+     * selector with AJAX equivalents
+     *
+     * @method _setup_for_section
+     * @private
+     * @param baseselector The selector to limit scope to
+     */
     _setup_for_section : function(section) {
         var chooserspan = section.one(CSS.SECTIONMODCHOOSER);
         if (!chooserspan) {
@@ -82,12 +110,11 @@ Y.extend(MODCHOOSER, M.core.chooserdialogue, {
         chooserlink.on('click', this.display_mod_chooser, this);
     },
     /**
-        * Display the module chooser
-        *
-        * @param e Event Triggering Event
-        * @param secitonid integer The ID of the section triggering the dialogue
-        * @return void
-        */
+     * Display the module chooser
+     *
+     * @method display_mod_chooser
+     * @param {EventFacade} e Triggering Event
+     */
     display_mod_chooser : function (e) {
         // Set the section for this version of the dialogue
         if (e.target.ancestor(CSS.SITETOPIC)) {
@@ -102,6 +129,13 @@ Y.extend(MODCHOOSER, M.core.chooserdialogue, {
         }
         this.display_chooser(e);
     },
+
+    /**
+     * Toggle availability of the activity chooser.
+     *
+     * @method toggle_mod_chooser
+     * @param {EventFacade} e
+     */
     toggle_mod_chooser : function(e) {
         // Get the add section link
         var modchooserlinks = Y.all('div.addresourcemodchooser');
@@ -151,6 +185,15 @@ Y.extend(MODCHOOSER, M.core.chooserdialogue, {
         // Prevent the page from reloading
         e.preventDefault();
     },
+
+    /**
+     * Helper function to set the value of a hidden radio button when a
+     * selection is made.
+     *
+     * @method option_selected
+     * @param {String} thisoption The selected option value
+     * @private
+     */
     option_selected : function(thisoption) {
         // Add the sectionid to the URL.
         this.hiddenRadioValue.setAttrs({
@@ -162,6 +205,13 @@ Y.extend(MODCHOOSER, M.core.chooserdialogue, {
 {
     NAME : MODCHOOSERNAME,
     ATTRS : {
+        /**
+         * The maximum height (in pixels) of the activity chooser.
+         *
+         * @attribute maxheight
+         * @type Number
+         * @default 800
+         */
         maxheight : {
             value : 800
         }

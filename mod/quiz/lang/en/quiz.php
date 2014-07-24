@@ -17,10 +17,9 @@
 /**
  * Strings for component 'quiz', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package    mod
- * @subpackage quiz
- * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package   mod_quiz
+ * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 $string['accessnoticesheader'] = 'You can preview this quiz, but if this were a real attempt, you would be blocked because:';
@@ -153,6 +152,10 @@ $string['comment'] = 'Comment';
 $string['commentorgrade'] = 'Make comment or override grade';
 $string['comments'] = 'Comments';
 $string['completedon'] = 'Completed on';
+$string['completionpass'] = 'Require passing grade';
+$string['completionpass_help'] = 'If enabled, this activity is considered complete when the student receives a passing grade, with the pass grade set in the gradebook.';
+$string['completionattemptsexhausted'] = 'Or all available attempts completed';
+$string['completionattemptsexhausted_help'] = 'Mark quiz complete when the student has exhausted the maximum number of attempts.';
 $string['configadaptive'] = 'If you choose Yes for this option then the student will be allowed multiple responses to a question even within the same attempt at the quiz.';
 $string['configattemptsallowed'] = 'Restriction on the number of attempts students are allowed at the quiz.';
 $string['configdecimaldigits'] = 'Number of digits that should be shown after the decimal point when displaying grades.';
@@ -306,10 +309,21 @@ $string['errornotnumbers'] = 'Error - answers must be numeric';
 $string['errorunexpectedevent'] = 'Unexpected event code {$a->event} found for question {$a->questionid} in attempt {$a->attemptid}.';
 $string['essay'] = 'Essay';
 $string['essayquestions'] = 'Questions';
+$string['eventattemptdeleted'] = 'Quiz attempt deleted';
+$string['eventattemptpreviewstarted'] = 'Quiz attempt preview started';
+$string['eventattemptreviewed'] = 'Quiz attempt reviewed';
+$string['eventattemptsummaryviewed'] = 'Quiz attempt summary viewed';
+$string['eventattemptviewed'] = 'Quiz attempt viewed';
+$string['eventeditpageviewed'] = 'Quiz edit page viewed';
+$string['eventoverridecreated'] = 'Quiz override created';
+$string['eventoverridedeleted'] = 'Quiz override deleted';
+$string['eventoverrideupdated'] = 'Quiz override updated';
+$string['eventquestionmanuallygraded'] = 'Question manually graded';
 $string['eventquizattemptabandoned'] = 'Quiz attempt abandoned';
 $string['eventquizattempttimelimitexceeded'] = 'Quiz attempt time limit exceeded';
 $string['eventquizattemptstarted'] = 'Quiz attempt started';
 $string['eventquizattemptsubmitted'] = 'Quiz attempt submitted';
+$string['eventreportviewed'] = 'Quiz report viewed';
 $string['everynquestions'] = 'Every {$a} questions';
 $string['everyquestion'] = 'Every question';
 $string['everythingon'] = 'Everything on';
@@ -557,7 +571,12 @@ $string['overrides'] = 'Overrides';
 $string['overrideuser'] = 'Override user';
 $string['overrideusereventname'] = '{$a->quiz} - Override';
 $string['page-mod-quiz-x'] = 'Any quiz module page';
+$string['page-mod-quiz-attempt'] = 'Attempt quiz page';
 $string['page-mod-quiz-edit'] = 'Edit quiz page';
+$string['page-mod-quiz-report'] = 'Any quiz report page';
+$string['page-mod-quiz-review'] = 'Review quiz attempt page';
+$string['page-mod-quiz-summary'] = 'Quiz attempt summary page';
+$string['page-mod-quiz-view'] = 'Quiz information page';
 $string['pagesize'] = 'Page size';
 $string['parent'] = 'Parent';
 $string['parentcategory'] = 'Parent category';
@@ -694,6 +713,7 @@ $string['reportregrade'] = 'Regrade attempts';
 $string['reportresponses'] = 'Detailed responses';
 $string['reports'] = 'Reports';
 $string['reportshowonly'] = 'Show only attempts';
+$string['reportshowonlyfinished'] = 'Show at most one finished attempt per user ({$a})';
 $string['reportsimplestat'] = 'Simple statistics';
 $string['reportusersall'] = 'all users who have attempted the quiz';
 $string['reportuserswith'] = 'enrolled users who have attempted the quiz';

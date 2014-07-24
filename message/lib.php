@@ -127,9 +127,6 @@ function message_print_contact_selector($countunreadtotal, $viewing, $user1, $us
             && has_capability('moodle/course:viewparticipants', $coursecontexts[$courseidtoshow])) {
 
             message_print_participants($coursecontexts[$courseidtoshow], $courseidtoshow, $PAGE->url, $showactionlinks, null, $page, $user2);
-        } else {
-            //shouldn't get here. User trying to access a course they're not in perhaps.
-            add_to_log(SITEID, 'message', 'view', 'index.php', $viewing);
         }
     }
 
@@ -373,21 +370,27 @@ function message_get_contacts($user1=null, $user2=null) {
                   ORDER BY u.firstname ASC";
 
     $rs = $DB->get_recordset_sql($strangersql, array($USER->id));
+    // Add user id as array index, so supportuser and noreply user don't get duplicated (if they are real users).
     foreach ($rs as $rd) {
-        $strangers[] = $rd;
+        $strangers[$rd->id] = $rd;
     }
     $rs->close();
 
-    // Add noreply user and support user to the list.
+    // Add noreply user and support user to the list, if they don't exist.
     $supportuser = core_user::get_support_user();
-    $supportuser->messagecount = message_count_unread_messages($USER, $supportuser);
-    if ($supportuser->messagecount > 0) {
-        $strangers[] = $supportuser;
+    if (!isset($strangers[$supportuser->id])) {
+        $supportuser->messagecount = message_count_unread_messages($USER, $supportuser);
+        if ($supportuser->messagecount > 0) {
+            $strangers[$supportuser->id] = $supportuser;
+        }
     }
+
     $noreplyuser = core_user::get_noreply_user();
-    $noreplyuser->messagecount = message_count_unread_messages($USER, $noreplyuser);
-    if ($noreplyuser->messagecount > 0) {
-        $strangers[] = $noreplyuser;
+    if (!isset($strangers[$noreplyuser->id])) {
+        $noreplyuser->messagecount = message_count_unread_messages($USER, $noreplyuser);
+        if ($noreplyuser->messagecount > 0) {
+            $strangers[$noreplyuser->id] = $noreplyuser;
+        }
     }
     return array($onlinecontacts, $offlinecontacts, $strangers);
 }
@@ -1003,13 +1006,36 @@ function message_add_contact($contactid, $blocked=0) {
         return false;
     }
 
+    // Check if a record already exists as we may be changing blocking status.
     if (($contact = $DB->get_record('message_contacts', array('userid' => $USER->id, 'contactid' => $contactid))) !== false) {
-    // A record already exists. We may be changing blocking status.
-
+        // Check if blocking status has been changed.
         if ($contact->blocked !== $blocked) {
-            // Blocking status has been changed.
             $contact->blocked = $blocked;
-            return $DB->update_record('message_contacts', $contact);
+            $DB->update_record('message_contacts', $contact);
+
+            if ($blocked == 1) {
+                // Trigger event for blocking a contact.
+                $event = \core\event\message_contact_blocked::create(array(
+                    'objectid' => $contact->id,
+                    'userid' => $contact->userid,
+                    'relateduserid' => $contact->contactid,
+                    'context'  => context_user::instance($contact->userid)
+                ));
+                $event->add_record_snapshot('message_contacts', $contact);
+                $event->trigger();
+            } else {
+                // Trigger event for unblocking a contact.
+                $event = \core\event\message_contact_unblocked::create(array(
+                    'objectid' => $contact->id,
+                    'userid' => $contact->userid,
+                    'relateduserid' => $contact->contactid,
+                    'context'  => context_user::instance($contact->userid)
+                ));
+                $event->add_record_snapshot('message_contacts', $contact);
+                $event->trigger();
+            }
+
+            return true;
         } else {
             // No change to blocking status.
             return true;
@@ -1021,7 +1047,24 @@ function message_add_contact($contactid, $blocked=0) {
         $contact->userid = $USER->id;
         $contact->contactid = $contactid;
         $contact->blocked = $blocked;
-        return $DB->insert_record('message_contacts', $contact, false);
+        $contact->id = $DB->insert_record('message_contacts', $contact);
+
+        $eventparams = array(
+            'objectid' => $contact->id,
+            'userid' => $contact->userid,
+            'relateduserid' => $contact->contactid,
+            'context'  => context_user::instance($contact->userid)
+        );
+
+        if ($blocked) {
+            $event = \core\event\message_contact_blocked::create($eventparams);
+        } else {
+            $event = \core\event\message_contact_added::create($eventparams);
+        }
+        // Trigger event.
+        $event->trigger();
+
+        return true;
     }
 }
 
@@ -1033,7 +1076,24 @@ function message_add_contact($contactid, $blocked=0) {
  */
 function message_remove_contact($contactid) {
     global $USER, $DB;
-    return $DB->delete_records('message_contacts', array('userid' => $USER->id, 'contactid' => $contactid));
+
+    if ($contact = $DB->get_record('message_contacts', array('userid' => $USER->id, 'contactid' => $contactid))) {
+        $DB->delete_records('message_contacts', array('id' => $contact->id));
+
+        // Trigger event for removing a contact.
+        $event = \core\event\message_contact_removed::create(array(
+            'objectid' => $contact->id,
+            'userid' => $contact->userid,
+            'relateduserid' => $contact->contactid,
+            'context'  => context_user::instance($contact->userid)
+        ));
+        $event->add_record_snapshot('message_contacts', $contact);
+        $event->trigger();
+
+        return true;
+    }
+
+    return false;
 }
 
 /**
@@ -1043,14 +1103,14 @@ function message_remove_contact($contactid) {
  * @return bool returns the result of delete_records()
  */
 function message_unblock_contact($contactid) {
-    global $USER, $DB;
-    return $DB->delete_records('message_contacts', array('userid' => $USER->id, 'contactid' => $contactid));
+    return message_add_contact($contactid, 0);
 }
 
 /**
- * block a user
+ * Block a user.
  *
  * @param int $contactid the user ID of the user to block
+ * @return bool
  */
 function message_block_contact($contactid) {
     return message_add_contact($contactid, 1);
@@ -2139,6 +2199,7 @@ function message_post_message($userfrom, $userto, $message, $format) {
     }
 
     $eventdata->timecreated     = time();
+    $eventdata->notification    = 0;
     return message_send($eventdata);
 }
 
@@ -2291,7 +2352,7 @@ function message_move_userfrom_unread2read($userid) {
  * @param int $fromuserid the id of the message sender
  * @return void
  */
-function message_mark_messages_read($touserid, $fromuserid){
+function message_mark_messages_read($touserid, $fromuserid) {
     global $DB;
 
     $sql = 'SELECT m.* FROM {message} m WHERE m.useridto=:useridto AND m.useridfrom=:useridfrom';
@@ -2325,7 +2386,21 @@ function message_mark_message_read($message, $timeread, $messageworkingempty=fal
         $DB->delete_records('message_working', array('unreadmessageid' => $messageid));
     }
     $messagereadid = $DB->insert_record('message_read', $message);
+
     $DB->delete_records('message', array('id' => $messageid));
+
+    // Trigger event for reading a message.
+    $event = \core\event\message_viewed::create(array(
+        'objectid' => $messagereadid,
+        'userid' => $message->useridto, // Using the user who read the message as they are the ones performing the action.
+        'context'  => context_user::instance($message->useridto),
+        'relateduserid' => $message->useridfrom,
+        'other' => array(
+            'messageid' => $messageid
+        )
+    ));
+    $event->trigger();
+
     return $messagereadid;
 }
 

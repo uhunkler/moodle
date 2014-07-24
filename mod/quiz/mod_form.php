@@ -17,8 +17,7 @@
 /**
  * Defines the quiz module ettings form.
  *
- * @package    mod
- * @subpackage quiz
+ * @package    mod_quiz
  * @copyright  2006 Jamie Pratt
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -37,6 +36,9 @@ require_once($CFG->dirroot . '/mod/quiz/locallib.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class mod_quiz_mod_form extends moodleform_mod {
+    /** @var array options to be used with date_time_selector fields in the quiz. */
+    public static $datefieldoptions = array('optional' => true, 'step' => 1);
+
     protected $_feedbacks;
     protected static $reviewfields = array(); // Initialised in the constructor.
 
@@ -79,11 +81,11 @@ class mod_quiz_mod_form extends moodleform_mod {
 
         // Open and close dates.
         $mform->addElement('date_time_selector', 'timeopen', get_string('quizopen', 'quiz'),
-                array('optional' => true, 'step' => 1));
+                self::$datefieldoptions);
         $mform->addHelpButton('timeopen', 'quizopenclose', 'quiz');
 
         $mform->addElement('date_time_selector', 'timeclose', get_string('quizclose', 'quiz'),
-                array('optional' => true, 'step' => 1));
+                self::$datefieldoptions);
 
         // Time limit.
         $mform->addElement('duration', 'timelimit', get_string('timelimit', 'quiz'),
@@ -247,13 +249,11 @@ class mod_quiz_mod_form extends moodleform_mod {
                 'neq', 'wontmatch');
 
         // -------------------------------------------------------------------------------
-        $mform->addElement('header', 'display', get_string('display', 'form'));
+        $mform->addElement('header', 'display', get_string('appearance'));
 
         // Show user picture.
-        $mform->addElement('select', 'showuserpicture', get_string('showuserpicture', 'quiz'), array(
-                QUIZ_SHOWIMAGE_NONE => get_string('shownoimage', 'quiz'),
-                QUIZ_SHOWIMAGE_SMALL => get_string('showsmallimage', 'quiz'),
-                QUIZ_SHOWIMAGE_LARGE => get_string('showlargeimage', 'quiz')));
+        $mform->addElement('select', 'showuserpicture', get_string('showuserpicture', 'quiz'),
+                quiz_get_user_image_options());
         $mform->addHelpButton('showuserpicture', 'showuserpicture', 'quiz');
         $mform->setAdvanced('showuserpicture', $quizconfig->showuserpicture_adv);
         $mform->setDefault('showuserpicture', $quizconfig->showuserpicture);
@@ -584,5 +584,38 @@ class mod_quiz_mod_form extends moodleform_mod {
         $errors = quiz_access_manager::validate_settings_form_fields($errors, $data, $files, $this);
 
         return $errors;
+    }
+
+    /**
+     * Display module-specific activity completion rules.
+     * Part of the API defined by moodleform_mod
+     * @return array Array of string IDs of added items, empty array if none
+     */
+    public function add_completion_rules() {
+        $mform = $this->_form;
+        $items = array();
+
+        $group = array();
+        $group[] = $mform->createElement('advcheckbox', 'completionpass', null, get_string('completionpass', 'quiz'),
+                array('group' => 'cpass'));
+
+        $group[] = $mform->createElement('advcheckbox', 'completionattemptsexhausted', null,
+                get_string('completionattemptsexhausted', 'quiz'),
+                array('group' => 'cattempts'));
+        $mform->disabledIf('completionattemptsexhausted', 'completionpass', 'notchecked');
+        $mform->addGroup($group, 'completionpassgroup', get_string('completionpass', 'quiz'), ' &nbsp; ', false);
+        $mform->addHelpButton('completionpassgroup', 'completionpass', 'quiz');
+        $items[] = 'completionpassgroup';
+        return $items;
+    }
+
+    /**
+     * Called during validation. Indicates whether a module-specific completion rule is selected.
+     *
+     * @param array $data Input data (not yet validated)
+     * @return bool True if one or more rules is enabled, false if none are.
+     */
+    public function completion_rule_enabled($data) {
+        return !empty($data['completionattemptsexhausted']) || !empty($data['completionpass']);
     }
 }

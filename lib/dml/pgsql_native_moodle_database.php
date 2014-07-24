@@ -136,6 +136,10 @@ class pgsql_native_moodle_database extends moodle_database {
             $connection = "user='$this->dbuser' password='$pass' dbname='$this->dbname'";
             if (strpos($this->dboptions['dbsocket'], '/') !== false) {
                 $connection = $connection." host='".$this->dboptions['dbsocket']."'";
+                if (!empty($this->dboptions['dbport'])) {
+                    // Somehow non-standard port is important for sockets - see MDL-44862.
+                    $connection = $connection." port ='".$this->dboptions['dbport']."'";
+                }
             }
         } else {
             $this->dboptions['dbsocket'] = '';
@@ -946,7 +950,7 @@ class pgsql_native_moodle_database extends moodle_database {
      * This method is intended for inserting of large number of small objects,
      * do not use for huge objects with text or binary fields.
      *
-     * @since 2.7
+     * @since Moodle 2.7
      *
      * @param string $table  The database table to be inserted into
      * @param array|Traversable $dataobjects list of objects to be inserted, must be compatible with foreach
@@ -1341,7 +1345,7 @@ class pgsql_native_moodle_database extends moodle_database {
     /**
      * Does this driver support tool_replace?
      *
-     * @since 2.6.1
+     * @since Moodle 2.6.1
      * @return bool
      */
     public function replace_all_text_supported() {

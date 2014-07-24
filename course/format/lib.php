@@ -269,7 +269,7 @@ abstract class format_base {
      * So if 'Return to course' does not make sense in your format your should probably return false.
      *
      * @return boolean
-     * @since 2.6
+     * @since Moodle 2.6
      */
     public function has_view_page() {
         return true;
@@ -353,7 +353,6 @@ abstract class format_base {
      *
      * The returned object's property (boolean)capable indicates that
      * the course format supports Moodle course ajax features.
-     * The property (array)testedbrowsers can be used as a parameter for {@link ajaxenabled()}.
      *
      * @return stdClass
      */
@@ -361,7 +360,6 @@ abstract class format_base {
         // no support by default
         $ajaxsupport = new stdClass();
         $ajaxsupport->capable = false;
-        $ajaxsupport->testedbrowsers = array();
         return $ajaxsupport;
     }
 

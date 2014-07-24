@@ -14,6 +14,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+/**
+ * functions used by AICC packages.
+ *
+ * @package    mod_scorm
+ * @copyright 1999 onwards Roberto Pinna
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
 function scorm_add_time($a, $b) {
     $aes = explode(':', $a);
     $bes = explode(':', $b);
@@ -106,8 +114,13 @@ function scorm_forge_cols_regexp($columns, $remodule='(".*")?,') {
     return $regexp;
 }
 
-
-function scorm_parse_aicc($scorm) {
+/**
+ * Sets up AICC packages
+ * Called whenever package changes
+ * @param object $scorm instance - fields are updated and changes saved into database
+ * @return bool
+ */
+function scorm_parse_aicc(&$scorm) {
     global $DB;
 
     if ($scorm->scormtype == SCORM_TYPE_AICCURL) {
@@ -359,9 +372,18 @@ function scorm_parse_aicc($scorm) {
         }
     }
 
-    $scorm->version = 'AICC';
+    // Find first launchable object.
+    $sqlselect = 'scorm = ? AND '.$DB->sql_isnotempty('scorm_scoes', 'launch', false, true);
+    // We use get_records here as we need to pass a limit in the query that works cross db.
+    $scoes = $DB->get_records_select('scorm_scoes', $sqlselect, array($scorm->id), 'sortorder', 'id', 0, 1);
+    if (!empty($scoes)) {
+        $sco = reset($scoes); // We only care about the first record - the above query only returns one.
+        $scorm->launch = $sco->id;
+    } else {
+        $scorm->launch = $launch;
+    }
 
-    $scorm->launch = $launch;
+    $scorm->version = 'AICC';
 
     return true;
 }
@@ -455,4 +477,88 @@ function scorm_aicc_generate_simple_sco($scorm) {
         $id = $DB->insert_record('scorm_scoes', $sco);
     }
     return $id;
+}
+
+/**
+ * Sets up $userdata array and default values for AICC package.
+ *
+ * @param stdClass $userdata an empty stdClass variable that should be set up with user values
+ * @param object $scorm package record
+ * @param string $scoid SCO Id
+ * @param string $attempt attempt number for the user
+ * @param string $mode scorm display mode type
+ * @return array The default values that should be used for AICC package
+ */
+function get_scorm_default (&$userdata, $scorm, $scoid, $attempt, $mode) {
+    global $USER;
+
+    $userdata->student_id = $USER->username;
+    $userdata->student_name = $USER->lastname .', '. $USER->firstname;
+
+    if ($usertrack = scorm_get_tracks($scoid, $USER->id, $attempt)) {
+        foreach ($usertrack as $key => $value) {
+            $userdata->$key = $value;
+        }
+    } else {
+        $userdata->status = '';
+        $userdata->score_raw = '';
+    }
+
+    if ($scodatas = scorm_get_sco($scoid, SCO_DATA)) {
+        foreach ($scodatas as $key => $value) {
+            $userdata->$key = $value;
+        }
+    } else {
+        print_error('cannotfindsco', 'scorm');
+    }
+    if (!$sco = scorm_get_sco($scoid)) {
+        print_error('cannotfindsco', 'scorm');
+    }
+
+    $userdata->mode = 'normal';
+    if (!empty($mode)) {
+        $userdata->mode = $mode;
+    }
+    if ($userdata->mode == 'normal') {
+        $userdata->credit = 'credit';
+    } else {
+        $userdata->credit = 'no-credit';
+    }
+
+    if (isset($userdata->status)) {
+        if ($userdata->status == '') {
+            $userdata->entry = 'ab-initio';
+        } else {
+            if (isset($userdata->{'cmi.core.exit'}) && ($userdata->{'cmi.core.exit'} == 'suspend')) {
+                $userdata->entry = 'resume';
+            } else {
+                $userdata->entry = '';
+            }
+        }
+    }
+
+    $def = array();
+    $def['cmi.core.student_id'] = $userdata->student_id;
+    $def['cmi.core.student_name'] = $userdata->student_name;
+    $def['cmi.core.credit'] = $userdata->credit;
+    $def['cmi.core.entry'] = $userdata->entry;
+    $def['cmi.launch_data'] = scorm_isset($userdata, 'datafromlms');
+    $def['cmi.core.lesson_mode'] = $userdata->mode;
+    $def['cmi.student_data.attempt_number'] = scorm_isset($userdata, 'cmi.student_data.attempt_number');
+    $def['cmi.student_data.mastery_score'] = scorm_isset($userdata, 'mastery_score');
+    $def['cmi.student_data.max_time_allowed'] = scorm_isset($userdata, 'max_time_allowed');
+    $def['cmi.student_data.time_limit_action'] = scorm_isset($userdata, 'time_limit_action');
+    $def['cmi.student_data.tries_during_lesson'] = scorm_isset($userdata, 'cmi.student_data.tries_during_lesson');
+
+    $def['cmi.core.lesson_location'] = scorm_isset($userdata, 'cmi.core.lesson_location');
+    $def['cmi.core.lesson_status'] = scorm_isset($userdata, 'cmi.core.lesson_status');
+    $def['cmi.core.exit'] = scorm_isset($userdata, 'cmi.core.exit');
+    $def['cmi.core.score.raw'] = scorm_isset($userdata, 'cmi.core.score.raw');
+    $def['cmi.core.score.max'] = scorm_isset($userdata, 'cmi.core.score.max');
+    $def['cmi.core.score.min'] = scorm_isset($userdata, 'cmi.core.score.min');
+    $def['cmi.core.total_time'] = scorm_isset($userdata, 'cmi.core.total_time', '00:00:00');
+    $def['cmi.suspend_data'] = scorm_isset($userdata, 'cmi.suspend_data');
+    $def['cmi.comments'] = scorm_isset($userdata, 'cmi.comments');
+
+    return $def;
 }

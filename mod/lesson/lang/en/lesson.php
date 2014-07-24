@@ -18,8 +18,7 @@
 /**
  * Strings for component 'lesson', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -386,6 +385,7 @@ $string['savechanges'] = 'Save changes';
 $string['savechangesandeol'] = 'Save all changes and go to the end of the lesson.';
 $string['savepage'] = 'Save page';
 $string['score'] = 'Score';
+$string['score_help'] = 'Score is only used when custom scoring is enabled. Each answer can then be given a numerical point value (positive or negative).';
 $string['scores'] = 'Scores';
 $string['secondpluswrong'] = 'Not quite.  Would you like to try again?';
 $string['selectaqtype'] = 'Select a question type';

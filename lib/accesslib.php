@@ -1269,7 +1269,7 @@ function reload_all_capabilities() {
  * Useful for the "temporary guest" access we grant to logged-in users.
  * This is useful for enrol plugins only.
  *
- * @since 2.2
+ * @since Moodle 2.2
  * @param context_course $coursecontext
  * @param int $roleid
  * @return void
@@ -1309,7 +1309,7 @@ function load_temp_course_role(context_course $coursecontext, $roleid) {
  * Removes any extra guest roles from current USER->access array.
  * This is useful for enrol plugins only.
  *
- * @since 2.2
+ * @since Moodle 2.2
  * @param context_course $coursecontext
  * @return void
  */
@@ -1744,6 +1744,7 @@ function role_assign($roleid, $userid, $contextid, $component = '', $itemid = 0,
     $ra->itemid       = $itemid;
     $ra->timemodified = $timemodified;
     $ra->modifierid   = empty($USER->id) ? 0 : $USER->id;
+    $ra->sortorder    = 0;
 
     $ra->id = $DB->insert_record('role_assignments', $ra);
 
@@ -1755,9 +1756,16 @@ function role_assign($roleid, $userid, $contextid, $component = '', $itemid = 0,
         reload_all_capabilities();
     }
 
-    $event = \core\event\role_assigned::create(
-        array('context'=>$context, 'objectid'=>$ra->roleid, 'relateduserid'=>$ra->userid,
-            'other'=>array('id'=>$ra->id, 'component'=>$ra->component, 'itemid'=>$ra->itemid)));
+    $event = \core\event\role_assigned::create(array(
+        'context' => $context,
+        'objectid' => $ra->roleid,
+        'relateduserid' => $ra->userid,
+        'other' => array(
+            'id' => $ra->id,
+            'component' => $ra->component,
+            'itemid' => $ra->itemid
+        )
+    ));
     $event->add_record_snapshot('role_assignments', $ra);
     $event->trigger();
 
@@ -1843,9 +1851,16 @@ function role_unassign_all(array $params, $subcontexts = false, $includemanual =
             if (!empty($USER->id) && $USER->id == $ra->userid) {
                 reload_all_capabilities();
             }
-            $event = \core\event\role_unassigned::create(
-                array('context'=>$context, 'objectid'=>$ra->roleid, 'relateduserid'=>$ra->userid,
-                    'other'=>array('id'=>$ra->id, 'component'=>$ra->component, 'itemid'=>$ra->itemid)));
+            $event = \core\event\role_unassigned::create(array(
+                'context' => $context,
+                'objectid' => $ra->roleid,
+                'relateduserid' => $ra->userid,
+                'other' => array(
+                    'id' => $ra->id,
+                    'component' => $ra->component,
+                    'itemid' => $ra->itemid
+                )
+            ));
             $event->add_record_snapshot('role_assignments', $ra);
             $event->trigger();
         }
@@ -2973,7 +2988,7 @@ function get_component_string($component, $contextlevel) {
 
     if ($component === 'moodle' or $component === 'core') {
         switch ($contextlevel) {
-            // TODO: this should probably use context level names instead
+            // TODO MDL-46123: this should probably use context level names instead
             case CONTEXT_SYSTEM:    return get_string('coresystem');
             case CONTEXT_USER:      return get_string('users');
             case CONTEXT_COURSECAT: return get_string('categories');
@@ -2992,7 +3007,7 @@ function get_component_string($component, $contextlevel) {
     }
 
     switch ($type) {
-        // TODO: this is really hacky, anyway it should be probably moved to lib/pluginlib.php
+        // TODO MDL-46123: this is really hacky and should be improved.
         case 'quiz':         return get_string($name.':componentname', $component);// insane hack!!!
         case 'repository':   return get_string('repository', 'repository').': '.get_string('pluginname', $component);
         case 'gradeimport':  return get_string('gradeimport', 'grades').': '.get_string('pluginname', $component);
@@ -4960,7 +4975,7 @@ function role_change_permission($roleid, $context, $capname, $permission) {
  * @category  access
  * @copyright Petr Skoda {@link http://skodak.org}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since     2.2
+ * @since     Moodle 2.2
  *
  * @property-read int $id context id
  * @property-read int $contextlevel CONTEXT_SYSTEM, CONTEXT_COURSE, etc.
@@ -5242,7 +5257,7 @@ abstract class context extends stdClass implements IteratorAggregate {
      * @param stdClass $record
      */
     protected function __construct(stdClass $record) {
-        $this->_id           = $record->id;
+        $this->_id           = (int)$record->id;
         $this->_contextlevel = (int)$record->contextlevel;
         $this->_instanceid   = $record->instanceid;
         $this->_path         = $record->path;
@@ -5651,7 +5666,7 @@ abstract class context extends stdClass implements IteratorAggregate {
      * Is this context part of any course? If yes return course context.
      *
      * @param bool $strict true means throw exception if not found, false means return false if not found
-     * @return course_context context of the enclosing course, null if not found or exception
+     * @return context_course context of the enclosing course, null if not found or exception
      */
     public function get_course_context($strict = true) {
         if ($strict) {
@@ -5771,7 +5786,7 @@ abstract class context extends stdClass implements IteratorAggregate {
  * @category  access
  * @copyright Petr Skoda {@link http://skodak.org}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since     2.2
+ * @since     Moodle 2.2
  */
 class context_helper extends context {
 
@@ -5784,6 +5799,13 @@ class context_helper extends context {
      * Instance does not make sense here, only static use
      */
     protected function __construct() {
+    }
+
+    /**
+     * Reset internal context levels array.
+     */
+    public static function reset_levels() {
+        self::$alllevels = null;
     }
 
     /**
@@ -5808,8 +5830,17 @@ class context_helper extends context {
             return;
         }
 
+        $levels = $CFG->custom_context_classes;
+        if (!is_array($levels)) {
+            $levels = @unserialize($levels);
+        }
+        if (!is_array($levels)) {
+            debugging('Invalid $CFG->custom_context_classes detected, value ignored.', DEBUG_DEVELOPER);
+            return;
+        }
+
         // Unsupported custom levels, use with care!!!
-        foreach ($CFG->custom_context_classes as $level => $classname) {
+        foreach ($levels as $level => $classname) {
             self::$alllevels[$level] = $classname;
         }
         ksort(self::$alllevels);
@@ -6031,7 +6062,7 @@ class context_helper extends context {
  * @category  access
  * @copyright Petr Skoda {@link http://skodak.org}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since     2.2
+ * @since     Moodle 2.2
  */
 class context_system extends context {
     /**
@@ -6272,7 +6303,7 @@ class context_system extends context {
  * @category  access
  * @copyright Petr Skoda {@link http://skodak.org}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since     2.2
+ * @since     Moodle 2.2
  */
 class context_user extends context {
     /**
@@ -6456,7 +6487,7 @@ class context_user extends context {
  * @category  access
  * @copyright Petr Skoda {@link http://skodak.org}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since     2.2
+ * @since     Moodle 2.2
  */
 class context_coursecat extends context {
     /**
@@ -6685,7 +6716,7 @@ class context_coursecat extends context {
  * @category  access
  * @copyright Petr Skoda {@link http://skodak.org}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since     2.2
+ * @since     Moodle 2.2
  */
 class context_course extends context {
     /**
@@ -6774,7 +6805,7 @@ class context_course extends context {
      * Is this context part of any course? If yes return course context.
      *
      * @param bool $strict true means throw exception if not found, false means return false if not found
-     * @return course_context context of the enclosing course, null if not found or exception
+     * @return context_course context of the enclosing course, null if not found or exception
      */
     public function get_course_context($strict = true) {
         return $this;
@@ -6904,7 +6935,7 @@ class context_course extends context {
  * @category  access
  * @copyright Petr Skoda {@link http://skodak.org}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since     2.2
+ * @since     Moodle 2.2
  */
 class context_module extends context {
     /**
@@ -7143,7 +7174,7 @@ class context_module extends context {
  * @category  access
  * @copyright Petr Skoda {@link http://skodak.org}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @since     2.2
+ * @since     Moodle 2.2
  */
 class context_block extends context {
     /**
@@ -7240,7 +7271,7 @@ class context_block extends context {
      * Is this context part of any course? If yes return course context.
      *
      * @param bool $strict true means throw exception if not found, false means return false if not found
-     * @return course_context context of the enclosing course, null if not found or exception
+     * @return context_course context of the enclosing course, null if not found or exception
      */
     public function get_course_context($strict = true) {
         $parentcontext = $this->get_parent_context();
@@ -7429,10 +7460,20 @@ function extract_suspended_users($context, &$users, $ignoreusers=array()) {
  * or enrolment has expired or not started.
  *
  * @param context $context context in which user enrolment is checked.
+ * @param bool $usecache Enable or disable (default) the request cache
  * @return array list of suspended user id's.
  */
-function get_suspended_userids($context){
+function get_suspended_userids(context $context, $usecache = false) {
     global $DB;
+
+    // Check the cache first for performance reasons if enabled.
+    if ($usecache) {
+        $cache = cache::make('core', 'suspended_userids');
+        $susers = $cache->get($context->id);
+        if ($susers !== false) {
+            return $susers;
+        }
+    }
 
     // Get all enrolled users.
     list($sql, $params) = get_enrolled_sql($context);
@@ -7450,5 +7491,12 @@ function get_suspended_userids($context){
             }
         }
     }
+
+    // Cache results for the remainder of this request.
+    if ($usecache) {
+        $cache->set($context->id, $susers);
+    }
+
+    // Return.
     return $susers;
 }

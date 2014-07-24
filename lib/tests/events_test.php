@@ -25,6 +25,8 @@
 
 defined('MOODLE_INTERNAL') || die();
 
+require_once(__DIR__.'/fixtures/event_fixtures.php');
+
 class core_events_testcase extends advanced_testcase {
 
     /**
@@ -49,6 +51,8 @@ class core_events_testcase extends advanced_testcase {
         // Check that the event data is valid.
         $this->assertInstanceOf('\core\event\course_category_created', $event);
         $this->assertEquals(context_coursecat::instance($category->id), $event->get_context());
+        $url = new moodle_url('/course/management.php', array('categoryid' => $event->objectid));
+        $this->assertEquals($url, $event->get_url());
         $expected = array(SITEID, 'category', 'add', 'editcategory.php?id=' . $category->id, $category->id);
         $this->assertEventLegacyLogData($expected, $event);
         $this->assertEventContextNotUsed($event);
@@ -74,6 +78,8 @@ class core_events_testcase extends advanced_testcase {
         // Check that the event data is valid.
         $this->assertInstanceOf('\core\event\course_category_updated', $event);
         $this->assertEquals(context_coursecat::instance($category->id), $event->get_context());
+        $url = new moodle_url('/course/editcategory.php', array('id' => $event->objectid));
+        $this->assertEquals($url, $event->get_url());
         $expected = array(SITEID, 'category', 'update', 'editcategory.php?id=' . $category->id, $category->id);
         $this->assertEventLegacyLogData($expected, $event);
 
@@ -172,6 +178,197 @@ class core_events_testcase extends advanced_testcase {
         $this->assertEquals(context_system::instance(), $event->get_context());
         $expected = array(SITEID, 'library', 'mailer', qualified_me(), 'ERROR: The email failed to send!');
         $this->assertEventLegacyLogData($expected, $event);
+        $this->assertEventContextNotUsed($event);
+    }
+
+    /**
+     * There is no api involved so the best we can do is test legacy data by triggering event manually.
+     */
+    public function test_course_user_report_viewed() {
+
+        $user = $this->getDataGenerator()->create_user();
+        $course = $this->getDataGenerator()->create_course();
+        $context = context_course::instance($course->id);
+
+        $eventparams = array();
+        $eventparams['context'] = $context;
+        $eventparams['relateduserid'] = $user->id;
+        $eventparams['other'] = array();
+        $eventparams['other']['mode'] = 'grade';
+        $event = \core\event\course_user_report_viewed::create($eventparams);
+
+        // Trigger and capture the event.
+        $sink = $this->redirectEvents();
+        $event->trigger();
+        $events = $sink->get_events();
+        $event = reset($events);
+
+        $this->assertInstanceOf('\core\event\course_user_report_viewed', $event);
+        $this->assertEquals(context_course::instance($course->id), $event->get_context());
+        $expected = array($course->id, 'course', 'user report', 'user.php?id=' . $course->id . '&amp;user='
+                . $user->id . '&amp;mode=grade', $user->id);
+        $this->assertEventLegacyLogData($expected, $event);
+        $this->assertEventContextNotUsed($event);
+    }
+
+    /**
+     * There is no api involved so the best we can do is test legacy data by triggering event manually.
+     */
+    public function test_course_viewed() {
+
+        $user = $this->getDataGenerator()->create_user();
+        $course = $this->getDataGenerator()->create_course();
+        $context = context_course::instance($course->id);
+
+        // First try with no optional parameters.
+        $eventparams = array();
+        $eventparams['context'] = $context;
+        $event = \core\event\course_viewed::create($eventparams);
+
+        // Trigger and capture the event.
+        $sink = $this->redirectEvents();
+        $event->trigger();
+        $events = $sink->get_events();
+        $event = reset($events);
+
+        $this->assertInstanceOf('\core\event\course_viewed', $event);
+        $this->assertEquals(context_course::instance($course->id), $event->get_context());
+        $expected = array($course->id, 'course', 'view', 'view.php?id=' . $course->id, $course->id);
+        $this->assertEventLegacyLogData($expected, $event);
+        $this->assertEventContextNotUsed($event);
+
+        // Now try with optional parameters.
+        $sectionid = 34;
+        $eventparams = array();
+        $eventparams['context'] = $context;
+        $eventparams['other'] = array('coursesectionid' => $sectionid);
+        $event = \core\event\course_viewed::create($eventparams);
+
+        // Trigger and capture the event.
+        $sink = $this->redirectEvents();
+        $event->trigger();
+        $loggeddata = $event->get_data();
+        $events = $sink->get_events();
+        $event = reset($events);
+
+
+        $this->assertInstanceOf('\core\event\course_viewed', $event);
+        $this->assertEquals(context_course::instance($course->id), $event->get_context());
+        $expected = array($course->id, 'course', 'view section', 'view.php?id=' . $course->id . '&amp;sectionid='
+                . $sectionid, $sectionid);
+        $this->assertEventLegacyLogData($expected, $event);
+        $this->assertEventContextNotUsed($event);
+
+        delete_course($course->id, false);
+        $restored = \core\event\base::restore($loggeddata, array('origin' => 'web', 'ip' => '127.0.0.1'));
+        $this->assertInstanceOf('\core\event\course_viewed', $restored);
+        $this->assertNull($restored->get_url());
+    }
+
+    public function test_recent_capability_viewed() {
+        $this->resetAfterTest();
+
+        $this->setAdminUser();
+        $course = $this->getDataGenerator()->create_course();
+        $context = context_course::instance($course->id);
+
+        $event = \core\event\recent_activity_viewed::create(array('context' => $context));
+
+        // Trigger and capture the event.
+        $sink = $this->redirectEvents();
+        $event->trigger();
+        $events = $sink->get_events();
+        $event = reset($events);
+
+        $this->assertInstanceOf('\core\event\recent_activity_viewed', $event);
+        $this->assertEquals($context, $event->get_context());
+        $expected = array($course->id, "course", "recent", "recent.php?id=$course->id", $course->id);
+        $this->assertEventLegacyLogData($expected, $event);
+        $this->assertEventContextNotUsed($event);
+        $url = new moodle_url('/course/recent.php', array('id' => $course->id));
+        $this->assertEquals($url, $event->get_url());
+        $event->get_name();
+    }
+
+    public function test_user_profile_viewed() {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $user = $this->getDataGenerator()->create_user();
+        $course = $this->getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        // User profile viewed in course context.
+        $eventparams = array(
+            'objectid' => $user->id,
+            'relateduserid' => $user->id,
+            'courseid' => $course->id,
+            'context' => $coursecontext,
+            'other' => array(
+                'courseid' => $course->id,
+                'courseshortname' => $course->shortname,
+                'coursefullname' => $course->fullname
+            )
+        );
+        $event = \core\event\user_profile_viewed::create($eventparams);
+
+        // Trigger and capture the event.
+        $sink = $this->redirectEvents();
+        $event->trigger();
+        $events = $sink->get_events();
+        $event = reset($events);
+
+        $this->assertInstanceOf('\core\event\user_profile_viewed', $event);
+        $log = array($course->id, 'user', 'view', 'view.php?id=' . $user->id . '&course=' . $course->id, $user->id);
+        $this->assertEventLegacyLogData($log, $event);
+        $this->assertEventContextNotUsed($event);
+
+        // User profile viewed in user context.
+        $usercontext = context_user::instance($user->id);
+        $eventparams['context'] = $usercontext;
+        unset($eventparams['courseid'], $eventparams['other']);
+        $event = \core\event\user_profile_viewed::create($eventparams);
+
+        // Trigger and capture the event.
+        $sink = $this->redirectEvents();
+        $event->trigger();
+        $events = $sink->get_events();
+        $event = reset($events);
+
+        $this->assertInstanceOf('\core\event\user_profile_viewed', $event);
+        $expected = null;
+        $this->assertEventLegacyLogData($expected, $event);
+        $this->assertEventContextNotUsed($event);
+    }
+
+    /**
+     * There is no API associated with this event, so we will just test standard features.
+     */
+    public function test_grade_viewed() {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $user = $this->getDataGenerator()->create_user();
+        $course = $this->getDataGenerator()->create_course();
+        $coursecontext = context_course::instance($course->id);
+
+        $event = \core_tests\event\grade_report_viewed::create(
+            array(
+                'context' => $coursecontext,
+                'courseid' => $course->id,
+                'userid' => $user->id,
+            )
+        );
+
+        // Trigger and capture the event.
+        $sink = $this->redirectEvents();
+        $event->trigger();
+        $events = $sink->get_events();
+        $event = reset($events);
+
+        $this->assertInstanceOf('\core\event\grade_report_viewed', $event);
+        $this->assertEquals($event->courseid, $course->id);
+        $this->assertEquals($event->userid, $user->id);
         $this->assertEventContextNotUsed($event);
     }
 }

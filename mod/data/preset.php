@@ -25,7 +25,7 @@
  *
  * @copyright 2005 Martin Dougiamas  http://dougiamas.com
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
- * @package mod-data
+ * @package mod_data
  */
 
 require_once('../../config.php');
@@ -61,7 +61,8 @@ $presets = data_get_available_presets($context);
 $strdelete = get_string('deleted', 'data');
 foreach ($presets as &$preset) {
     if (!empty($preset->userid)) {
-        $presetuser = $DB->get_record('user', array('id'=>$preset->userid), 'id,firstname,lastname', MUST_EXIST);
+        $namefields = get_all_user_name_fields(true);
+        $presetuser = $DB->get_record('user', array('id' => $preset->userid), 'id, ' . $namefields, MUST_EXIST);
         $preset->description = $preset->name.' ('.fullname($presetuser, true).')';
     } else {
         $preset->userid = 0;

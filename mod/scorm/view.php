@@ -22,22 +22,23 @@ $id = optional_param('id', '', PARAM_INT);       // Course Module ID, or
 $a = optional_param('a', '', PARAM_INT);         // scorm ID
 $organization = optional_param('organization', '', PARAM_INT); // organization ID
 $action = optional_param('action', '', PARAM_ALPHA);
+$preventskip = optional_param('preventskip', '', PARAM_INT); // Prevent Skip view, set by javascript redirects.
 
 if (!empty($id)) {
     if (! $cm = get_coursemodule_from_id('scorm', $id, 0, true)) {
         print_error('invalidcoursemodule');
     }
-    if (! $course = $DB->get_record("course", array("id"=>$cm->course))) {
+    if (! $course = $DB->get_record("course", array("id" => $cm->course))) {
         print_error('coursemisconf');
     }
-    if (! $scorm = $DB->get_record("scorm", array("id"=>$cm->instance))) {
+    if (! $scorm = $DB->get_record("scorm", array("id" => $cm->instance))) {
         print_error('invalidcoursemodule');
     }
 } else if (!empty($a)) {
-    if (! $scorm = $DB->get_record("scorm", array("id"=>$a))) {
+    if (! $scorm = $DB->get_record("scorm", array("id" => $a))) {
         print_error('invalidcoursemodule');
     }
-    if (! $course = $DB->get_record("course", array("id"=>$scorm->course))) {
+    if (! $course = $DB->get_record("course", array("id" => $scorm->course))) {
         print_error('coursemisconf');
     }
     if (! $cm = get_coursemodule_from_instance("scorm", $scorm->id, $course->id, true)) {
@@ -47,7 +48,7 @@ if (!empty($id)) {
     print_error('missingparameter');
 }
 
-$url = new moodle_url('/mod/scorm/view.php', array('id'=>$cm->id));
+$url = new moodle_url('/mod/scorm/view.php', array('id' => $cm->id));
 if ($organization !== '') {
     $url->param('organization', $organization);
 }
@@ -65,22 +66,24 @@ $contextmodule = context_module::instance($cm->id);
 $launch = false; // Does this automatically trigger a launch based on skipview.
 if (!empty($scorm->popup)) {
     $orgidentifier = '';
+
     $scoid = 0;
-    if ($scorm->skipview >= SCORM_SKIPVIEW_FIRST &&
+    $orgidentifier = '';
+    if ($sco = scorm_get_sco($scorm->launch, SCO_ONLY)) {
+        if (($sco->organization == '') && ($sco->launch == '')) {
+            $orgidentifier = $sco->identifier;
+        } else {
+            $orgidentifier = $sco->organization;
+        }
+        $scoid = $sco->id;
+    }
+
+    if (empty($preventskip) && $scorm->skipview >= SCORM_SKIPVIEW_FIRST &&
         has_capability('mod/scorm:skipview', $contextmodule) &&
         !has_capability('mod/scorm:viewreport', $contextmodule)) { // Don't skip users with the capability to view reports.
 
         // do we launch immediately and redirect the parent back ?
         if ($scorm->skipview == SCORM_SKIPVIEW_ALWAYS || !scorm_has_tracks($scorm->id, $USER->id)) {
-            $orgidentifier = '';
-            if ($sco = scorm_get_sco($scorm->launch, SCO_ONLY)) {
-                if (($sco->organization == '') && ($sco->launch == '')) {
-                    $orgidentifier = $sco->identifier;
-                } else {
-                    $orgidentifier = $sco->organization;
-                }
-                $scoid = $sco->id;
-            }
             $launch = true;
         }
     }
@@ -91,15 +94,21 @@ if (!empty($scorm->popup)) {
     if (isset($courseformat->coursedisplay) && $courseformat->coursedisplay == COURSE_DISPLAY_MULTIPAGE) {
         $sectionid = $cm->sectionnum;
     }
-
+    if ($courseformat->format == 'singleactivity') {
+        $courseurl = $url->out(false, array('preventskip' => '1'));
+    } else {
+        $courseurl = course_get_url($course, $sectionid)->out(false);
+    }
     $PAGE->requires->data_for_js('scormplayerdata', Array('launch' => $launch,
                                                            'currentorg' => $orgidentifier,
                                                            'sco' => $scoid,
                                                            'scorm' => $scorm->id,
-                                                           'courseurl' => course_get_url($course, $sectionid)->out(false),
+                                                           'courseurl' => $courseurl,
                                                            'cwidth' => $scorm->width,
                                                            'cheight' => $scorm->height,
                                                            'popupoptions' => $scorm->options), true);
+    $PAGE->requires->string_for_js('popupsblocked', 'scorm');
+    $PAGE->requires->string_for_js('popuplaunched', 'scorm');
     $PAGE->requires->js('/mod/scorm/view.js', true);
 }
 
@@ -118,11 +127,12 @@ $event = \mod_scorm\event\course_module_viewed::create(array(
     'objectid' => $scorm->id,
     'context' => $contextmodule,
 ));
+$event->add_record_snapshot('course', $course);
 $event->add_record_snapshot('scorm', $scorm);
 $event->add_record_snapshot('course_modules', $cm);
 $event->trigger();
 
-if (empty($launch) && (has_capability('mod/scorm:skipview', $contextmodule))) {
+if (empty($preventskip) && empty($launch) && (has_capability('mod/scorm:skipview', $contextmodule))) {
     scorm_simple_play($scorm, $USER, $contextmodule, $cm->id);
 }
 
@@ -136,12 +146,12 @@ echo $OUTPUT->heading(format_string($scorm->name));
 
 if (!empty($action) && confirm_sesskey() && has_capability('mod/scorm:deleteownresponses', $contextmodule)) {
     if ($action == 'delete') {
-        $confirmurl = new moodle_url($PAGE->url, array('action'=>'deleteconfirm'));
+        $confirmurl = new moodle_url($PAGE->url, array('action' => 'deleteconfirm'));
         echo $OUTPUT->confirm(get_string('deleteuserattemptcheck', 'scorm'), $confirmurl, $PAGE->url);
         echo $OUTPUT->footer();
         exit;
     } else if ($action == 'deleteconfirm') {
-        //delete this users attempts.
+        // delete this users attempts.
         $DB->delete_records('scorm_scoes_track', array('userid' => $USER->id, 'scormid' => $scorm->id));
         scorm_update_grades($scorm, $USER->id, true);
         echo $OUTPUT->notification(get_string('scormresponsedeleted', 'scorm'), 'notifysuccess');

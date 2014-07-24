@@ -76,6 +76,22 @@ class core_userliblib_testcase extends advanced_testcase {
         user_update_user($user, false);
         $dbuser = $DB->get_record('user', array('id' => $user->id));
         $this->assertSame($password, $dbuser->password);
+
+        // Verify event is not triggred by user_update_user when needed.
+        $sink = $this->redirectEvents();
+        user_update_user($user, false, false);
+        $events = $sink->get_events();
+        $sink->close();
+        $this->assertCount(0, $events);
+
+        // With password, there should be 1 event.
+        $sink = $this->redirectEvents();
+        user_update_user($user, true, false);
+        $events = $sink->get_events();
+        $sink->close();
+        $this->assertCount(1, $events);
+        $event = array_pop($events);
+        $this->assertInstanceOf('\core\event\user_password_updated', $event);
     }
 
     /**
@@ -128,5 +144,37 @@ class core_userliblib_testcase extends advanced_testcase {
         $this->assertEventLegacyData($dbuser, $event);
         $expectedlogdata = array(SITEID, 'user', 'add', '/view.php?id='.$event->objectid, fullname($dbuser));
         $this->assertEventLegacyLogData($expectedlogdata, $event);
+
+        // Verify event is not triggred by user_create_user when needed.
+        $user = array('username' => 'usernametest2'); // Create another user.
+        $sink = $this->redirectEvents();
+        user_create_user($user, true, false);
+        $events = $sink->get_events();
+        $sink->close();
+        $this->assertCount(0, $events);
+    }
+
+    /**
+     * Test function user_count_login_failures().
+     */
+    public function test_user_count_login_failures() {
+        $this->resetAfterTest();
+        $user = $this->getDataGenerator()->create_user();
+        $this->assertEquals(0, get_user_preferences('login_failed_count_since_success', 0, $user));
+        for ($i = 0; $i < 10; $i++) {
+            login_attempt_failed($user);
+        }
+        $this->assertEquals(10, get_user_preferences('login_failed_count_since_success', 0, $user));
+        $count = user_count_login_failures($user); // Reset count.
+        $this->assertEquals(10, $count);
+        $this->assertEquals(0, get_user_preferences('login_failed_count_since_success', 0, $user));
+
+        for ($i = 0; $i < 10; $i++) {
+            login_attempt_failed($user);
+        }
+        $this->assertEquals(10, get_user_preferences('login_failed_count_since_success', 0, $user));
+        $count = user_count_login_failures($user, false); // Do not reset count.
+        $this->assertEquals(10, $count);
+        $this->assertEquals(10, get_user_preferences('login_failed_count_since_success', 0, $user));
     }
 }

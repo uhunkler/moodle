@@ -41,6 +41,8 @@ class testing_data_generator {
     protected $scalecount = 0;
     protected $groupcount = 0;
     protected $groupingcount = 0;
+    protected $rolecount = 0;
+    protected $tagcount = 0;
 
     /** @var array list of plugin generators */
     protected $generators = array();
@@ -217,14 +219,33 @@ EOD;
         }
 
         if (!isset($record['maildisplay'])) {
-            $record['maildisplay'] = 1;
+            $record['maildisplay'] = $CFG->defaultpreference_maildisplay;
+        }
+
+        if (!isset($record['mailformat'])) {
+            $record['mailformat'] = $CFG->defaultpreference_mailformat;
+        }
+
+        if (!isset($record['maildigest'])) {
+            $record['maildigest'] = $CFG->defaultpreference_maildigest;
+        }
+
+        if (!isset($record['autosubscribe'])) {
+            $record['autosubscribe'] = $CFG->defaultpreference_autosubscribe;
+        }
+
+        if (!isset($record['trackforums'])) {
+            $record['trackforums'] = $CFG->defaultpreference_trackforums;
         }
 
         if (!isset($record['deleted'])) {
             $record['deleted'] = 0;
         }
 
-        $record['timecreated'] = time();
+        if (!isset($record['timecreated'])) {
+            $record['timecreated'] = time();
+        }
+
         $record['timemodified'] = $record['timecreated'];
         $record['lastip'] = '0.0.0.0';
 
@@ -583,7 +604,7 @@ EOD;
      * @param array|stdClass $record data to use to up set the instance.
      * @param array $options options
      * @return stdClass repository instance record
-     * @since 2.5.1
+     * @since Moodle 2.5.1
      */
     public function create_repository($type, $record=null, array $options = null) {
         $generator = $this->get_plugin_generator('repository_'.$type);
@@ -597,7 +618,7 @@ EOD;
      * @param array|stdClass $record data to use to up set the instance.
      * @param array $options options
      * @return repository_type object
-     * @since 2.5.1
+     * @since Moodle 2.5.1
      */
     public function create_repository_type($type, $record=null, array $options = null) {
         $generator = $this->get_plugin_generator('repository_'.$type);
@@ -654,6 +675,144 @@ EOD;
         }
 
         return $DB->get_record('scale', array('id'=>$id), '*', MUST_EXIST);
+    }
+
+    /**
+     * Creates a new role in the system.
+     *
+     * You can fill $record with the role 'name',
+     * 'shortname', 'description' and 'archetype'.
+     *
+     * If an archetype is specified it's capabilities,
+     * context where the role can be assigned and
+     * all other properties are copied from the archetype;
+     * if no archetype is specified it will create an
+     * empty role.
+     *
+     * @param array|stdClass $record
+     * @return int The new role id
+     */
+    public function create_role($record=null) {
+        global $DB;
+
+        $this->rolecount++;
+        $i = $this->rolecount;
+
+        $record = (array)$record;
+
+        if (empty($record['shortname'])) {
+            $record['shortname'] = 'role-' . $i;
+        }
+
+        if (empty($record['name'])) {
+            $record['name'] = 'Test role ' . $i;
+        }
+
+        if (empty($record['description'])) {
+            $record['description'] = 'Test role ' . $i . ' description';
+        }
+
+        if (empty($record['archetype'])) {
+            $record['archetype'] = '';
+        } else {
+            $archetypes = get_role_archetypes();
+            if (empty($archetypes[$record['archetype']])) {
+                throw new coding_exception('\'role\' requires the field \'archetype\' to specify a ' .
+                    'valid archetype shortname (editingteacher, student...)');
+            }
+        }
+
+        // Creates the role.
+        if (!$newroleid = create_role($record['name'], $record['shortname'], $record['description'], $record['archetype'])) {
+            throw new coding_exception('There was an error creating \'' . $record['shortname'] . '\' role');
+        }
+
+        // If no archetype was specified we allow it to be added to all contexts,
+        // otherwise we allow it in the archetype contexts.
+        if (!$record['archetype']) {
+            $contextlevels = array_keys(context_helper::get_all_levels());
+        } else {
+            // Copying from the archetype default rol.
+            $archetyperoleid = $DB->get_field(
+                'role',
+                'id',
+                array('shortname' => $record['archetype'], 'archetype' => $record['archetype'])
+            );
+            $contextlevels = get_role_contextlevels($archetyperoleid);
+        }
+        set_role_contextlevels($newroleid, $contextlevels);
+
+        if ($record['archetype']) {
+
+            // We copy all the roles the archetype can assign, override and switch to.
+            if ($record['archetype']) {
+                $types = array('assign', 'override', 'switch');
+                foreach ($types as $type) {
+                    $rolestocopy = get_default_role_archetype_allows($type, $record['archetype']);
+                    foreach ($rolestocopy as $tocopy) {
+                        $functionname = 'allow_' . $type;
+                        $functionname($newroleid, $tocopy);
+                    }
+                }
+            }
+
+            // Copying the archetype capabilities.
+            $sourcerole = $DB->get_record('role', array('id' => $archetyperoleid));
+            role_cap_duplicate($sourcerole, $newroleid);
+        }
+
+        return $newroleid;
+    }
+
+    /**
+     * Create a tag.
+     *
+     * @param array|stdClass $record
+     * @return stdClass the tag record
+     */
+    public function create_tag($record = null) {
+        global $DB, $USER;
+
+        $this->tagcount++;
+        $i = $this->tagcount;
+
+        $record = (array) $record;
+
+        if (!isset($record['userid'])) {
+            $record['userid'] = $USER->id;
+        }
+
+        if (!isset($record['name'])) {
+            $record['name'] = 'Tag name ' . $i;
+        }
+
+        if (!isset($record['rawname'])) {
+            $record['rawname'] = 'Raw tag name ' . $i;
+        }
+
+        if (!isset($record['tagtype'])) {
+            $record['tagtype'] = 'default';
+        }
+
+        if (!isset($record['description'])) {
+            $record['description'] = 'Tag description';
+        }
+
+        if (!isset($record['descriptionformat'])) {
+            $record['descriptionformat'] = FORMAT_MOODLE;
+        }
+
+        if (!isset($record['flag'])) {
+            $record['flag'] = 0;
+        }
+
+        if (!isset($record['timemodified'])) {
+            $record['timemodified'] = time();
+        }
+
+        $id = $DB->insert_record('tag', $record);
+
+        return $DB->get_record('tag', array('id' => $id), '*', MUST_EXIST);
     }
 
     /**

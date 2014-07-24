@@ -973,7 +973,7 @@ function page_doc_link($text='') {
 /**
  * Returns the path to use when constructing a link to the docs.
  *
- * @since 2.5.1 2.6
+ * @since Moodle 2.5.1 2.6
  * @param moodle_page $page
  * @return string
  */
@@ -1680,6 +1680,7 @@ function purify_html($text, $options = array()) {
             'nntp' => true,
             'news' => true,
             'rtsp' => true,
+            'rtmp' => true,
             'teamspeak' => true,
             'gopher' => true,
             'mms' => true,
@@ -1784,6 +1785,7 @@ function markdown_to_html($text) {
         return $text;
     }
 
+    require_once($CFG->libdir .'/markdown/MarkdownInterface.php');
     require_once($CFG->libdir .'/markdown/Markdown.php');
     require_once($CFG->libdir .'/markdown/MarkdownExtra.php');
 
@@ -2839,7 +2841,7 @@ function debugging($message = '', $level = DEBUG_NORMAL, $backtrace = null) {
         if (!$backtrace) {
             $backtrace = debug_backtrace();
         }
-        $from = format_backtrace($backtrace, CLI_SCRIPT);
+        $from = format_backtrace($backtrace, CLI_SCRIPT || NO_DEBUG_DISPLAY);
         if (PHPUNIT_TEST) {
             if (phpunit_util::debugging_triggered($message, $level, $from)) {
                 // We are inside test, the debug message was logged.
@@ -2850,7 +2852,7 @@ function debugging($message = '', $level = DEBUG_NORMAL, $backtrace = null) {
         if (NO_DEBUG_DISPLAY) {
             // Script does not want any errors or debugging in output,
             // we send the info to error log instead.
-            error_log('Debugging: ' . $message . $from);
+            error_log('Debugging: ' . $message . ' in '. PHP_EOL . $from);
 
         } else if ($forcedebug or $CFG->debugdisplay) {
             if (!defined('DEBUGGING_PRINTED')) {
@@ -2993,21 +2995,22 @@ class progress_bar {
      * @return void Echo's output
      */
     public function create() {
+        global $PAGE;
+
         $this->time_start = microtime(true);
         if (CLI_SCRIPT) {
             return; // Temporary solution for cli scripts.
         }
-        $widthplusborder = $this->width + 2;
+
+        $PAGE->requires->string_for_js('secondsleft', 'moodle');
+
         $htmlcode = <<<EOT
-        <div style="text-align:center;width:{$widthplusborder}px;clear:both;padding:0;margin:0 auto;">
-            <h2 id="status_{$this->html_id}" style="text-align: center;margin:0 auto"></h2>
-            <p id="time_{$this->html_id}"></p>
-            <div id="bar_{$this->html_id}" style="border-style:solid;border-width:1px;width:{$this->width}px;height:50px;">
-                <div id="progress_{$this->html_id}"
-                style="text-align:center;background:#FFCC66;width:4px;border:1px
-                solid gray;height:38px; padding-top:10px;">&nbsp;<span id="pt_{$this->html_id}"></span>
-                </div>
+        <div class="progressbar_container" style="width: {$this->width}px;" id="{$this->html_id}">
+            <h2></h2>
+            <div class="progress progress-striped active">
+                <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">&nbsp;</div>
             </div>
+            <p></p>
         </div>
 EOT;
         flush();
@@ -3033,12 +3036,11 @@ EOT;
             return; // Temporary solution for cli scripts.
         }
 
-        $es = $this->estimate($percent);
+        $estimate = $this->estimate($percent);
 
-        if ($es === null) {
+        if ($estimate === null) {
             // Always do the first and last updates.
-            $es = "?";
-        } else if ($es == 0) {
+        } else if ($estimate == 0) {
             // Always do the last updates.
         } else if ($this->lastupdate + 20 < time()) {
             // We must update otherwise browser would time out.
@@ -3046,13 +3048,15 @@ EOT;
             // No significant change, no need to update anything.
             return;
         }
+        if (is_numeric($estimate)) {
+            $estimate = get_string('secondsleft', 'moodle', round($estimate, 2));
+        }
 
-        $this->percent = $percent;
+        $this->percent = round($percent, 2);
         $this->lastupdate = microtime(true);
 
-        $w = ($this->percent/100) * $this->width;
-        echo html_writer::script(js_writer::function_call('update_progress_bar',
-            array($this->html_id, $w, $this->percent, $msg, $es)));
+        echo html_writer::script(js_writer::function_call('updateProgressBar',
+            array($this->html_id, $this->percent, $msg, $estimate)));
         flush();
     }
 

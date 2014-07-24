@@ -18,8 +18,7 @@
 /**
  * List of all resources in course
  *
- * @package    mod
- * @subpackage resource
+ * @package    mod_resource
  * @copyright  1999 onwards Martin Dougiamas (http://dougiamas.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -37,6 +36,7 @@ $params = array(
     'context' => context_course::instance($course->id)
 );
 $event = \mod_resource\event\course_module_instance_list_viewed::create($params);
+$event->add_record_snapshot('course', $course);
 $event->trigger();
 
 $strresource     = get_string('modulename', 'resource');

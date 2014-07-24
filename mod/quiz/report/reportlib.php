@@ -78,6 +78,15 @@ function quiz_report_unindex($datum) {
 }
 
 /**
+ * Are there any questions in this quiz?
+ * @param int $quizid the quiz id.
+ */
+function quiz_has_questions($quizid) {
+    global $DB;
+    return $DB->record_exists('quiz_slots', array('quizid' => $quizid));
+}
+
+/**
  * Get the slots of real questions (not descriptions) in this quiz, in order.
  * @param object $quiz the quiz.
  * @return array of slot => $question object with fields
@@ -86,41 +95,23 @@ function quiz_report_unindex($datum) {
 function quiz_report_get_significant_questions($quiz) {
     global $DB;
 
-    $questionids = quiz_questions_in_quiz($quiz->questions);
-    if (empty($questionids)) {
-        return array();
-    }
+    $qsbyslot = $DB->get_records_sql("
+            SELECT slot.slot,
+                   q.id,
+                   q.length,
+                   slot.maxmark
 
-    list($usql, $params) = $DB->get_in_or_equal(explode(',', $questionids));
-    $params[] = $quiz->id;
-    $questions = $DB->get_records_sql("
-SELECT
-    q.id,
-    q.length,
-    qqi.maxmark
+              FROM {question} q
+              JOIN {quiz_slots} slot ON slot.questionid = q.id
 
-FROM {question} q
-JOIN {quiz_question_instances} qqi ON qqi.questionid = q.id
+             WHERE slot.quizid = ?
+               AND q.length > 0
 
-WHERE
-    q.id $usql AND
-    qqi.quizid = ? AND
-    q.length > 0", $params);
+          ORDER BY slot.slot", array($quiz->id));
 
-    $qsbyslot = array();
     $number = 1;
-    foreach (explode(',', $questionids) as $key => $id) {
-        if (!array_key_exists($id, $questions)) {
-            continue;
-        }
-
-        $slot = $key + 1;
-        $question = $questions[$id];
-        $question->slot = $slot;
+    foreach ($qsbyslot as $question) {
         $question->number = $number;
-
-        $qsbyslot[$slot] = $question;
-
         $number += $question->length;
     }
 
@@ -165,35 +156,33 @@ function quiz_report_qm_filter_select($quiz, $quizattemptsalias = 'quiza') {
 function quiz_report_grade_method_sql($grademethod, $quizattemptsalias = 'quiza') {
     switch ($grademethod) {
         case QUIZ_GRADEHIGHEST :
-            return "$quizattemptsalias.id = (
-                            SELECT MIN(qa2.id)
-                            FROM {quiz_attempts} qa2
+            return "($quizattemptsalias.state = 'finished' AND NOT EXISTS (
+                           SELECT 1 FROM {quiz_attempts} qa2
                             WHERE qa2.quiz = $quizattemptsalias.quiz AND
                                 qa2.userid = $quizattemptsalias.userid AND
-                                COALESCE(qa2.sumgrades, 0) = (
-                                    SELECT MAX(COALESCE(qa3.sumgrades, 0))
-                                    FROM {quiz_attempts} qa3
-                                    WHERE qa3.quiz = $quizattemptsalias.quiz AND
-                                        qa3.userid = $quizattemptsalias.userid
-                                )
-                            )";
+                                 qa2.state = 'finished' AND (
+                COALESCE(qa2.sumgrades, 0) > COALESCE($quizattemptsalias.sumgrades, 0) OR
+               (COALESCE(qa2.sumgrades, 0) = COALESCE($quizattemptsalias.sumgrades, 0) AND qa2.attempt < $quizattemptsalias.attempt)
+                                )))";
 
         case QUIZ_GRADEAVERAGE :
             return '';
 
         case QUIZ_ATTEMPTFIRST :
-            return "$quizattemptsalias.id = (
-                            SELECT MIN(qa2.id)
-                            FROM {quiz_attempts} qa2
+            return "($quizattemptsalias.state = 'finished' AND NOT EXISTS (
+                           SELECT 1 FROM {quiz_attempts} qa2
                             WHERE qa2.quiz = $quizattemptsalias.quiz AND
-                                qa2.userid = $quizattemptsalias.userid)";
+                                qa2.userid = $quizattemptsalias.userid AND
+                                 qa2.state = 'finished' AND
+                               qa2.attempt < $quizattemptsalias.attempt))";
 
         case QUIZ_ATTEMPTLAST :
-            return "$quizattemptsalias.id = (
-                            SELECT MAX(qa2.id)
-                            FROM {quiz_attempts} qa2
+            return "($quizattemptsalias.state = 'finished' AND NOT EXISTS (
+                           SELECT 1 FROM {quiz_attempts} qa2
                             WHERE qa2.quiz = $quizattemptsalias.quiz AND
-                                qa2.userid = $quizattemptsalias.userid)";
+                                qa2.userid = $quizattemptsalias.userid AND
+                                 qa2.state = 'finished' AND
+                               qa2.attempt > $quizattemptsalias.attempt))";
     }
 }
 

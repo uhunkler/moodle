@@ -58,6 +58,9 @@ class calculator {
      */
     protected $progress;
 
+    /**
+     * @var string The class name of the class to instantiate to store statistics calculated.
+     */
     protected $statscollectionclassname = '\core_question\statistics\questions\all_calculated_for_qubaid_condition';
 
     /**
@@ -81,8 +84,10 @@ class calculator {
     }
 
     /**
-     * @param $qubaids \qubaid_condition
-     * @return all_calculated_for_qubaid_condition
+     * Calculate the stats.
+     *
+     * @param \qubaid_condition $qubaids Which question usages to calculate the stats for?
+     * @return all_calculated_for_qubaid_condition The calculated stats.
      */
     public function calculate($qubaids) {
 
@@ -99,15 +104,17 @@ class calculator {
                 $this->progress->increment_progress();
 
                 $israndomquestion = ($step->questionid != $this->stats->for_slot($step->slot)->questionid);
+                $breakdownvariants = !$israndomquestion && $this->stats->for_slot($step->slot)->break_down_by_variant();
                 // If this is a variant we have not seen before create a place to store stats calculations for this variant.
-                if (!$israndomquestion && is_null($this->stats->for_slot($step->slot , $step->variant))) {
-                    $this->stats->initialise_for_slot($step->slot, $this->stats->for_slot($step->slot)->question, $step->variant);
+                if ($breakdownvariants && is_null($this->stats->for_slot($step->slot , $step->variant))) {
+                    $question = $this->stats->for_slot($step->slot)->question;
+                    $this->stats->initialise_for_slot($step->slot, $question, $step->variant);
                     $this->stats->for_slot($step->slot, $step->variant)->randomguessscore =
-                                                    $this->get_random_guess_score($this->stats->for_slot($step->slot)->question);
+                                                                                    $this->get_random_guess_score($question);
                 }
 
                 // Step data walker for main question.
-                $this->initial_steps_walker($step, $this->stats->for_slot($step->slot), $summarks, true, !$israndomquestion);
+                $this->initial_steps_walker($step, $this->stats->for_slot($step->slot), $summarks, true, $breakdownvariants);
 
                 // If this is a random question do the calculations for sub question stats.
                 if ($israndomquestion) {
@@ -154,14 +161,13 @@ class calculator {
                 $this->stats->for_subq($qid)->question = $subquestion;
                 $this->stats->for_subq($qid)->randomguessscore = $this->get_random_guess_score($subquestion);
 
-                $this->stats->for_subq($qid)->sort_variants();
-                if ($variants = $this->stats->get_variants_for_subq($qid)) {
+                if ($variants = $this->stats->for_subq($qid)->get_variants()) {
                     foreach ($variants as $variant) {
                         $this->stats->for_subq($qid, $variant)->question = $subquestion;
                         $this->stats->for_subq($qid, $variant)->randomguessscore = $this->get_random_guess_score($subquestion);
                     }
+                    $this->stats->for_subq($qid)->sort_variants();
                 }
-
                 $this->initial_question_walker($this->stats->for_subq($qid));
 
                 if ($this->stats->for_subq($qid)->usedin) {
@@ -206,9 +212,9 @@ class calculator {
             foreach ($lateststeps as $step) {
                 $this->progress->increment_progress();
                 $israndomquestion = ($this->stats->for_slot($step->slot)->question->qtype == 'random');
-                $this->secondary_steps_walker($step, $this->stats->for_slot($step->slot), $summarks, !$israndomquestion);
+                $this->secondary_steps_walker($step, $this->stats->for_slot($step->slot), $summarks);
 
-                if ($this->stats->for_slot($step->slot)->subquestions) {
+                if ($israndomquestion) {
                     $this->secondary_steps_walker($step, $this->stats->for_subq($step->questionid), $summarks);
                 }
             }
@@ -268,7 +274,9 @@ class calculator {
     }
 
     /**
-     * @param $qubaids \qubaid_condition
+     * Get the latest step data from the db, from which we will calculate stats.
+     *
+     * @param \qubaid_condition $qubaids Which question usages to get the latest steps for?
      * @return array with two items
      *              - $lateststeps array of latest step data for the question usages
      *              - $summarks    array of total marks for each usage, indexed by usage id
@@ -299,6 +307,10 @@ class calculator {
     }
 
     /**
+     * Calculating the stats is a four step process.
+     *
+     * We loop through all 'last step' data first.
+     *
      * Update $stats->totalmarks, $stats->markarray, $stats->totalothermarks
      * and $stats->othermarksarray to include another state.
      *
@@ -323,18 +335,18 @@ class calculator {
         }
         if ($dovariantalso) {
             $this->initial_steps_walker($step, $stats->variantstats[$step->variant], $summarks, $positionstat, false);
-
         }
     }
 
     /**
+     * Then loop through all questions for the first time.
+     *
      * Perform some computations on the per-question statistics calculations after
      * we have been through all the step data.
      *
      * @param calculated $stats question stats to update.
-     * @param bool       $dovariantsalso do we also want to do the same calculations for the variants?
      */
-    protected function initial_question_walker($stats, $dovariantsalso = true) {
+    protected function initial_question_walker($stats) {
         $stats->markaverage = $stats->totalmarks / $stats->s;
 
         if ($stats->maxmark != 0) {
@@ -350,23 +362,28 @@ class calculator {
         sort($stats->markarray, SORT_NUMERIC);
         sort($stats->othermarksarray, SORT_NUMERIC);
 
-        if ($dovariantsalso) {
-            foreach ($stats->variantstats as $variantstat) {
-                $this->initial_question_walker($variantstat, false);
-            }
+        // Here we have collected enough data to make the decision about which questions have variants whose stats we also want to
+        // calculate. We delete the initialised structures where they are not needed.
+        if (!$stats->get_variants() || !$stats->break_down_by_variant()) {
+            $stats->clear_variants();
+        }
+
+        foreach ($stats->get_variants() as $variant) {
+            $this->initial_question_walker($stats->variantstats[$variant]);
         }
     }
 
     /**
+     * Loop through all last step data again.
+     *
      * Now we know the averages, accumulate the date needed to compute the higher
      * moments of the question scores.
      *
      * @param object $step        the state to add to the statistics.
      * @param calculated $stats       the question statistics we are accumulating.
-     * @param array  $summarks    of the sum of marks for each question usage, indexed by question usage id
-     * @param bool   $dovariantalso do we also want to do the same calculations for the variant?
+     * @param float[]  $summarks    of the sum of marks for each question usage, indexed by question usage id
      */
-    protected function secondary_steps_walker($step, $stats, $summarks, $dovariantalso = true) {
+    protected function secondary_steps_walker($step, $stats, $summarks) {
         $markdifference = $step->mark - $stats->markaverage;
         if ($stats->subquestion) {
             $othermarkdifference = $summarks[$step->questionusageid] - $stats->othermarkaverage;
@@ -384,19 +401,19 @@ class calculator {
         $stats->covariancemaxsum += $sortedmarkdifference * $sortedothermarkdifference;
         $stats->covariancewithoverallmarksum += $markdifference * $overallmarkdifference;
 
-        if ($dovariantalso) {
-            $this->secondary_steps_walker($step, $stats->variantstats[$step->variant], $summarks, false);
+        if (isset($stats->variantstats[$step->variant])) {
+            $this->secondary_steps_walker($step, $stats->variantstats[$step->variant], $summarks);
         }
     }
 
     /**
+     * And finally loop through all the questions again.
+     *
      * Perform more per-question statistics calculations.
      *
      * @param calculated $stats question stats to update.
-     * @param bool       $dovariantsalso do we also want to do the same calculations for the variants?
      */
-    protected function secondary_question_walker($stats, $dovariantsalso = true) {
-
+    protected function secondary_question_walker($stats) {
         if ($stats->s > 1) {
             $stats->markvariance = $stats->markvariancesum / ($stats->s - 1);
             $stats->othermarkvariance = $stats->othermarkvariancesum / ($stats->s - 1);
@@ -435,16 +452,16 @@ class calculator {
             $stats->discriminativeefficiency = null;
         }
 
-        if ($dovariantsalso) {
-            foreach ($stats->variantstats as $variantstat) {
-                $this->secondary_question_walker($variantstat, false);
-            }
+        foreach ($stats->variantstats as $variantstat) {
+            $this->secondary_question_walker($variantstat);
         }
     }
 
     /**
-     * @param object $questiondata
-     * @return number the random guess score for this question.
+     * Given the question data find the average grade that random guesses would get.
+     *
+     * @param object $questiondata the full question object.
+     * @return float the random guess score for this question.
      */
     protected function get_random_guess_score($questiondata) {
         return \question_bank::get_qtype(
@@ -454,8 +471,8 @@ class calculator {
     /**
      * Find time of non-expired statistics in the database.
      *
-     * @param $qubaids \qubaid_condition
-     * @return integer|boolean Time of cached record that matches this qubaid_condition or false is non found.
+     * @param \qubaid_condition $qubaids Which question usages to look for?
+     * @return int|bool Time of cached record that matches this qubaid_condition or false is non found.
      */
     public function get_last_calculated_time($qubaids) {
         return $this->stats->get_last_calculated_time($qubaids);
@@ -464,8 +481,8 @@ class calculator {
     /**
      * Load cached statistics from the database.
      *
-     * @param $qubaids \qubaid_condition
-     * @return all_calculated_for_qubaid_condition
+     * @param \qubaid_condition $qubaids Which question usages to load the cached stats for?
+     * @return all_calculated_for_qubaid_condition The cached stats.
      */
     public function get_cached($qubaids) {
         $this->stats->get_cached($qubaids);

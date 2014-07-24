@@ -17,15 +17,14 @@
 /**
  * Folder module version information
  *
- * @package    mod
- * @subpackage folder
- * @copyright  2009 Petr Skoda  {@link http://skodak.org}
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @package   mod_folder
+ * @copyright 2009 Petr Skoda  {@link http://skodak.org}
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2013110500;       // The current module version (Date: YYYYMMDDXX)
-$plugin->requires  = 2013110500;    // Requires this Moodle version
+$plugin->version   = 2014051200;       // The current module version (Date: YYYYMMDDXX)
+$plugin->requires  = 2014050800;    // Requires this Moodle version
 $plugin->component = 'mod_folder';     // Full name of the plugin (used for diagnostics)
 $plugin->cron      = 0;

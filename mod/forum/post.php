@@ -18,7 +18,7 @@
 /**
  * Edit and save a new post to a discussion
  *
- * @package mod-forum
+ * @package   mod_forum
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -335,8 +335,17 @@ if (!empty($forum)) {      // User is starting a new discussion in a forum
                 }
                 forum_delete_discussion($discussion, false, $course, $cm, $forum);
 
-                add_to_log($discussion->course, "forum", "delete discussion",
-                           "view.php?id=$cm->id", "$forum->id", $cm->id);
+                $params = array(
+                    'objectid' => $discussion->id,
+                    'context' => $modcontext,
+                    'other' => array(
+                        'forumid' => $forum->id,
+                    )
+                );
+
+                $event = \mod_forum\event\discussion_deleted::create($params);
+                $event->add_record_snapshot('forum_discussions', $discussion);
+                $event->trigger();
 
                 redirect("view.php?f=$discussion->forum");
 
@@ -352,7 +361,23 @@ if (!empty($forum)) {      // User is starting a new discussion in a forum
                     $discussionurl = "discuss.php?d=$post->discussion";
                 }
 
-                add_to_log($discussion->course, "forum", "delete post", $discussionurl, "$post->id", $cm->id);
+                $params = array(
+                    'context' => $modcontext,
+                    'objectid' => $post->id,
+                    'other' => array(
+                        'discussionid' => $discussion->id,
+                        'forumid' => $forum->id,
+                        'forumtype' => $forum->type,
+                    )
+                );
+
+                if ($post->userid !== $USER->id) {
+                    $params['relateduserid'] = $post->userid;
+                }
+                $event = \mod_forum\event\post_deleted::create($params);
+                $event->add_record_snapshot('forum_posts', $post);
+                $event->add_record_snapshot('forum_discussions', $discussion);
+                $event->trigger();
 
                 redirect(forum_go_back_to($discussionurl));
             } else {
@@ -455,8 +480,39 @@ if (!empty($forum)) {      // User is starting a new discussion in a forum
         forum_discussion_update_last_post($discussion->id);
         forum_discussion_update_last_post($newid);
 
-        add_to_log($discussion->course, "forum", "prune post",
-                       "discuss.php?d=$newid", "$post->id", $cm->id);
+        // Fire events to reflect the split..
+        $params = array(
+            'context' => $modcontext,
+            'objectid' => $discussion->id,
+            'other' => array(
+                'forumid' => $forum->id,
+            )
+        );
+        $event = \mod_forum\event\discussion_updated::create($params);
+        $event->trigger();
+
+        $params = array(
+            'context' => $modcontext,
+            'objectid' => $newid,
+            'other' => array(
+                'forumid' => $forum->id,
+            )
+        );
+        $event = \mod_forum\event\discussion_created::create($params);
+        $event->trigger();
+
+        $params = array(
+            'context' => $modcontext,
+            'objectid' => $post->id,
+            'other' => array(
+                'discussionid' => $newid,
+                'forumid' => $forum->id,
+                'forumtype' => $forum->type,
+            )
+        );
+        $event = \mod_forum\event\post_updated::create($params);
+        $event->add_record_snapshot('forum_discussions', $discussion);
+        $event->trigger();
 
         redirect(forum_go_back_to("discuss.php?d=$newid"));
 
@@ -517,6 +573,7 @@ $mform_post = new mod_forum_post_form('post.php', array('course' => $course,
                                                         'modcontext' => $modcontext,
                                                         'forum' => $forum,
                                                         'post' => $post,
+                                                        'subscribe' => \mod_forum\subscriptions::is_subscribed($USER->id, $forum),
                                                         'thresholdwarning' => $thresholdwarning,
                                                         'edit' => $edit), 'post', '', array('id' => 'mformforum'));
 
@@ -551,20 +608,16 @@ if (!empty($parent)) {
     }
 }
 
-if (forum_is_subscribed($USER->id, $forum->id)) {
-    $subscribe = true;
-
-} else if (forum_user_has_posted($forum->id, 0, $USER->id)) {
-    $subscribe = false;
-
-} else {
-    // user not posted yet - use subscription default specified in profile
-    $subscribe = !empty($USER->autosubscribe);
-}
-
 $postid = empty($post->id) ? null : $post->id;
 $draftid_editor = file_get_submitted_draft_itemid('message');
 $currenttext = file_prepare_draft_area($draftid_editor, $modcontext->id, 'mod_forum', 'post', $postid, mod_forum_post_form::editor_options($modcontext, $postid), $post->message);
+
+// Always suggest that the user be subscribed to a discussion that they're posting in unless they've already posted, in
+// which case use their existing preference.
+$discussionsubscribe = true;
+if (isset($discussion) && forum_user_has_posted($forum->id, $discussion->id, $USER->id)) {
+    $discussionsubscribe = \mod_forum\subscriptions::is_subscribed($USER->id, $forum, $discussion->id);
+}
 $mform_post->set_data(array(        'attachments'=>$draftitemid,
                                     'general'=>$heading,
                                     'subject'=>$post->subject,
@@ -573,7 +626,7 @@ $mform_post->set_data(array(        'attachments'=>$draftitemid,
                                         'format'=>empty($post->messageformat) ? editors_get_preferred_format() : $post->messageformat,
                                         'itemid'=>$draftid_editor
                                     ),
-                                    'subscribe'=>$subscribe?1:0,
+                                    'discussionsubscribe' => $discussionsubscribe,
                                     'mailnow'=>!empty($post->mailnow),
                                     'userid'=>$post->userid,
                                     'parent'=>$post->parent,
@@ -672,7 +725,7 @@ if ($fromform = $mform_post->get_data()) {
             $message .= '<br />'.get_string("editedpostupdated", "forum", fullname($realuser));
         }
 
-        if ($subscribemessage = forum_post_subscription($fromform, $forum)) {
+        if ($subscribemessage = forum_post_subscription($fromform, $forum, $discussion)) {
             $timemessage = 4;
         }
         if ($forum->type == 'single') {
@@ -683,8 +736,24 @@ if ($fromform = $mform_post->get_data()) {
         } else {
             $discussionurl = "discuss.php?d=$discussion->id#p$fromform->id";
         }
-        add_to_log($course->id, "forum", "update post",
-                "$discussionurl&amp;parent=$fromform->id", "$fromform->id", $cm->id);
+
+        $params = array(
+            'context' => $modcontext,
+            'objectid' => $fromform->id,
+            'other' => array(
+                'discussionid' => $discussion->id,
+                'forumid' => $forum->id,
+                'forumtype' => $forum->type,
+            )
+        );
+
+        if ($realpost->userid !== $USER->id) {
+            $params['relateduserid'] = $realpost->userid;
+        }
+
+        $event = \mod_forum\event\post_updated::create($params);
+        $event->add_record_snapshot('forum_discussions', $discussion);
+        $event->trigger();
 
         redirect(forum_go_back_to("$discussionurl"), $message.$subscribemessage, $timemessage);
 
@@ -706,7 +775,7 @@ if ($fromform = $mform_post->get_data()) {
                 $timemessage = 4;
             }
 
-            if ($subscribemessage = forum_post_subscription($fromform, $forum)) {
+            if ($subscribemessage = forum_post_subscription($fromform, $forum, $discussion)) {
                 $timemessage = 4;
             }
 
@@ -726,8 +795,20 @@ if ($fromform = $mform_post->get_data()) {
             } else {
                 $discussionurl = "discuss.php?d=$discussion->id";
             }
-            add_to_log($course->id, "forum", "add post",
-                      "$discussionurl&amp;parent=$fromform->id", "$fromform->id", $cm->id);
+
+            $params = array(
+                'context' => $modcontext,
+                'objectid' => $fromform->id,
+                'other' => array(
+                    'discussionid' => $discussion->id,
+                    'forumid' => $forum->id,
+                    'forumtype' => $forum->type,
+                )
+            );
+            $event = \mod_forum\event\post_created::create($params);
+            $event->add_record_snapshot('forum_posts', $fromform);
+            $event->add_record_snapshot('forum_discussions', $discussion);
+            $event->trigger();
 
             // Update completion state
             $completion=new completion_info($course);
@@ -773,8 +854,16 @@ if ($fromform = $mform_post->get_data()) {
         $message = '';
         if ($discussion->id = forum_add_discussion($discussion, $mform_post, $message)) {
 
-            add_to_log($course->id, "forum", "add discussion",
-                    "discuss.php?d=$discussion->id", "$discussion->id", $cm->id);
+            $params = array(
+                'context' => $modcontext,
+                'objectid' => $discussion->id,
+                'other' => array(
+                    'forumid' => $forum->id,
+                )
+            );
+            $event = \mod_forum\event\discussion_created::create($params);
+            $event->add_record_snapshot('forum_discussions', $discussion);
+            $event->trigger();
 
             $timemessage = 2;
             if (!empty($message)) { // if we're printing stuff about the file upload
@@ -789,7 +878,7 @@ if ($fromform = $mform_post->get_data()) {
                 $message .= '<p>'.get_string("postaddedtimeleft", "forum", format_time($CFG->maxeditingtime)) . '</p>';
             }
 
-            if ($subscribemessage = forum_post_subscription($discussion, $forum)) {
+            if ($subscribemessage = forum_post_subscription($fromform, $forum, $discussion)) {
                 $timemessage = 6;
             }
 

@@ -175,6 +175,11 @@ class user_picture implements renderable {
     public $class = 'userpicture';
 
     /**
+     * @var bool Whether to be visible to screen readers.
+     */
+    public $visibletoscreenreaders = true;
+
+    /**
      * User picture constructor.
      *
      * @param stdClass $user user record with at least id, picture, imagealt, firstname and lastname set.
@@ -1102,6 +1107,22 @@ class html_writer {
     }
 
     /**
+     * Generates a simple image tag with attributes.
+     *
+     * @param string $src The source of image
+     * @param string $alt The alternate text for image
+     * @param array $attributes The tag attributes (array('height' => $max_height, 'class' => 'class1') etc.)
+     * @return string HTML fragment
+     */
+    public static function img($src, $alt, array $attributes = null) {
+        $attributes = (array)$attributes;
+        $attributes['src'] = $src;
+        $attributes['alt'] = $alt;
+
+        return self::empty_tag('img', $attributes);
+    }
+
+    /**
      * Generates random html element id.
      *
      * @staticvar int $counter
@@ -1350,7 +1371,7 @@ class html_writer {
         if (empty($attributes['id'])) {
             $attributes['id'] = self::random_id('ts_');
         }
-        $timerselector = self::select($timeunits, $name, $currentdate[$userdatetype], null, array('id'=>$attributes['id']));
+        $timerselector = self::select($timeunits, $name, $currentdate[$userdatetype], null, $attributes);
         $label = self::tag('label', get_string(substr($type, 0, -1), 'form'), array('for'=>$attributes['id'], 'class'=>'accesshide'));
 
         return $label.$timerselector;

@@ -48,10 +48,7 @@ class block_course_overview_renderer extends plugin_renderer_base {
         // Intialise string/icon etc if user is editing and courses > 1
         if ($this->page->user_is_editing() && (count($courses) > 1)) {
             $userediting = true;
-            // If ajaxenabled then include DND JS and replace link with move image.
-            if (ajaxenabled()) {
-                $this->page->requires->js_init_call('M.block_course_overview.add_handles');
-            }
+            $this->page->requires->js_init_call('M.block_course_overview.add_handles');
 
             // Check if course is moving
             $ismovingcourse = optional_param('movecourse', FALSE, PARAM_BOOL);
@@ -318,11 +315,11 @@ class block_course_overview_renderer extends plugin_renderer_base {
         $plural = 's';
         if ($msgcount > 0) {
             $output .= get_string('youhavemessages', 'block_course_overview', $msgcount);
-        } else {
-            $output .= get_string('youhavenomessages', 'block_course_overview');
             if ($msgcount == 1) {
                 $plural = '';
             }
+        } else {
+            $output .= get_string('youhavenomessages', 'block_course_overview');
         }
         $output .= html_writer::link(new moodle_url('/message/index.php'), get_string('message'.$plural, 'block_course_overview'));
         $output .= $this->output->box_end();

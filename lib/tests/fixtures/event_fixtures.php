@@ -45,7 +45,7 @@ class unittest_executed extends \core\event\base {
     }
 
     public function get_url() {
-        return new moodle_url('/somepath/somefile.php', array('id'=>$this->data['other']['sample']));
+        return new \moodle_url('/somepath/somefile.php', array('id'=>$this->data['other']['sample']));
     }
 
     public static function get_legacy_eventname() {
@@ -72,17 +72,17 @@ class unittest_observer {
     }
 
     public static function observe_one(unittest_executed $event) {
-        self::$info[] = 'observe_one-'.$event->courseid;
+        self::$info[] = 'observe_one-'.$event->other['sample'];
         self::$event[] = $event;
     }
 
     public static function external_observer(unittest_executed $event) {
-        self::$info[] = 'external_observer-'.$event->courseid;
+        self::$info[] = 'external_observer-'.$event->other['sample'];
         self::$event[] = $event;
     }
 
     public static function broken_observer(unittest_executed $event) {
-        self::$info[] = 'broken_observer-'.$event->courseid;
+        self::$info[] = 'broken_observer-'.$event->other['sample'];
         self::$event[] = $event;
         throw new \Exception('someerror');
     }
@@ -95,10 +95,10 @@ class unittest_observer {
         }
         self::$event[] = $event;
         if (!empty($event->nest)) {
-            self::$info[] = 'observe_all-nesting-'.$event->courseid;
-            unittest_executed::create(array('courseid'=>3, 'context'=>\context_system::instance(), 'other'=>array('sample'=>666, 'xx'=>666)))->trigger();
+            self::$info[] = 'observe_all-nesting-'.$event->other['sample'];
+            unittest_executed::create(array('context'=>\context_system::instance(), 'other'=>array('sample'=>666, 'xx'=>666)))->trigger();
         } else {
-            self::$info[] = 'observe_all-'.$event->courseid;
+            self::$info[] = 'observe_all-'.$event->other['sample'];
         }
     }
 
@@ -205,6 +205,7 @@ class problematic_event3 extends \core\event\base {
     }
 
     protected function validate_data() {
+        parent::validate_data();
         if (empty($this->data['other'])) {
             debugging('other is missing');
         }
@@ -229,15 +230,6 @@ class noname_event extends \core\event\base {
 }
 
 /**
- * Class content_viewed.
- *
- * Wrapper for testing \core\event\content_viewed .
- */
-class content_viewed extends \core\event\content_viewed {
-}
-
-
-/**
  * Class course_module_viewed.
  *
  * Wrapper for testing \core\event\course_module_viewed.
@@ -256,6 +248,12 @@ class course_module_viewed extends \core\event\course_module_viewed {
  * Wrapper for testing \core\event\course_module_viewed.
  */
 class course_module_viewed_noinit extends \core\event\course_module_viewed {
+}
+
+/**
+ * Event for testing core\event\grade_report_viewed.
+ */
+class grade_report_viewed extends \core\event\grade_report_viewed {
 }
 
 /**
@@ -282,5 +280,71 @@ class context_used_in_event extends \core\event\base {
 
     protected function get_legacy_logdata() {
         return array($this->data['courseid'], 'core_unittest', 'view', 'unittest.php?id=' . $this->context->instanceid);
+    }
+}
+
+/**
+ * This is an explanation of the event.
+ *      - I'm making a point here.
+ *      - I have a second {@link something}  point here.
+ *      - whitespace is intentional to test it's removal.
+ *
+ *
+ * I have something else *Yeah* that.
+ *
+ *
+ *
+ * @package    core
+ * @category   phpunit
+ * @copyright  2014 Adrian Greeve <adrian@moodle.com>
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class full_docblock extends \core\event\base {
+
+    protected function init() {
+
+    }
+}
+
+/**
+ * We have only the description in the docblock
+ * and nothing else.
+ */
+class docblock_test2 extends \core\event\base {
+
+    protected function init() {
+
+    }
+}
+
+/**
+ * Calendar event created event.
+ *
+ * @property-read array $other {
+ *      Extra information about the event.
+ *
+ *      - int timestart: timestamp for event time start.
+ *      - string name: Name of the event.
+ *      - int repeatid: Id of the parent event if present, else 0.
+ * }
+ *
+ * @package    core
+ * @since      Moodle 2.7
+ * @copyright  2014 onwards Adrian Greeve
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class docblock_test3 extends \core\event\base {
+
+    protected function init() {
+
+    }
+}
+
+class static_info_viewing extends \core\event\base {
+
+    protected function init() {
+        $this->data['crud'] = 'r';
+        $this->data['edulevel'] = self::LEVEL_OTHER;
+        $this->data['objecttable'] = 'mod_unittest';
     }
 }

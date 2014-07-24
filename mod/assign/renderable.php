@@ -65,17 +65,21 @@ class assign_gradingmessage implements renderable {
     public $message = '';
     /** @var int $coursemoduleid */
     public $coursemoduleid = 0;
+    /** @var int $gradingerror should be set true if there was a problem grading */
+    public $gradingerror = null;
 
     /**
      * Constructor
      * @param string $heading This is the heading to display
      * @param string $message This is the message to display
+     * @param bool $gradingerror Set to true to display the message as an error.
      * @param int $coursemoduleid
      */
-    public function __construct($heading, $message, $coursemoduleid) {
+    public function __construct($heading, $message, $coursemoduleid, $gradingerror = false) {
         $this->heading = $heading;
         $this->message = $message;
         $this->coursemoduleid = $coursemoduleid;
+        $this->gradingerror = $gradingerror;
     }
 
 }
@@ -576,6 +580,26 @@ class assign_header implements renderable {
         $this->coursemoduleid = $coursemoduleid;
         $this->subpage = $subpage;
         $this->preface = $preface;
+    }
+}
+
+/**
+ * Renderable header related to an individual subplugin
+ * @package   mod_assign
+ * @copyright 2014 Henning Bostelmann
+ * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+class assign_plugin_header implements renderable {
+    /** @var assign_plugin $plugin */
+    public $plugin = null;
+
+    /**
+     * Header for a single plugin
+     *
+     * @param assign_plugin $plugin
+     */
+    public function __construct(assign_plugin $plugin) {
+        $this->plugin = $plugin;
     }
 }
 

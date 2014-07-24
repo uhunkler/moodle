@@ -18,8 +18,7 @@
 /**
  * Resource module version information
  *
- * @package    mod
- * @subpackage resource
+ * @package    mod_resource
  * @copyright  2009 Petr Skoda  {@link http://skodak.org}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -58,6 +57,8 @@ $params = array(
     'objectid' => $resource->id
 );
 $event = \mod_resource\event\course_module_viewed::create($params);
+$event->add_record_snapshot('course_modules', $cm);
+$event->add_record_snapshot('course', $course);
 $event->add_record_snapshot('resource', $resource);
 $event->trigger();
 

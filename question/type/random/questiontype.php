@@ -86,7 +86,7 @@ class qtype_random extends question_type {
         list($qcsql, $qcparams) = $DB->get_in_or_equal($categorylist);
         // TODO use in_or_equal for $otherquestionsinuse and $this->manualqtypes.
         return $DB->record_exists_select('question',
-                "category $qcsql
+                "category {$qcsql}
                      AND parent = 0
                      AND hidden = 0
                      AND id NOT IN ($otherquestionsinuse)
@@ -151,7 +151,13 @@ class qtype_random extends question_type {
 
     public function save_question($question, $form) {
         $form->name = '';
-        $form->questiontextformat = FORMAT_MOODLE;
+
+        // In case someone set the question text to true/false in the old style, set it properly.
+        if ($form->questiontext['text']) {
+            $form->questiontext['text'] = '1';
+        } else {
+            $form->questiontext['text'] = '0';
+        }
         $form->tags = array();
 
         // Name is not a required field for random questions, but

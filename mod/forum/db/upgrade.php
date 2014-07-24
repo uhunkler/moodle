@@ -36,7 +36,7 @@
  * Please do not forget to use upgrade_set_timeout()
  * before any action that may take longer time to finish.
  *
- * @package mod-forum
+ * @package   mod_forum
  * @copyright 2003 onwards Eloy Lafuente (stronk7) {@link http://stronk7.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -111,6 +111,79 @@ function xmldb_forum_upgrade($oldversion) {
 
     // Moodle v2.6.0 release upgrade line.
     // Put any upgrade step following this.
+
+    if ($oldversion < 2014040400) {
+
+        // Define index userid-postid (not unique) to be dropped form forum_read.
+        $table = new xmldb_table('forum_read');
+        $index = new xmldb_index('userid-postid', XMLDB_INDEX_NOTUNIQUE, array('userid', 'postid'));
+
+        // Conditionally launch drop index userid-postid.
+        if ($dbman->index_exists($table, $index)) {
+            $dbman->drop_index($table, $index);
+        }
+
+
+        // Define index postid-userid (not unique) to be added to forum_read.
+        $index = new xmldb_index('postid-userid', XMLDB_INDEX_NOTUNIQUE, array('postid', 'userid'));
+
+        // Conditionally launch add index postid-userid.
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        // Forum savepoint reached.
+        upgrade_mod_savepoint(true, 2014040400, 'forum');
+    }
+
+    // Moodle v2.7.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2014051201) {
+
+        // Incorrect values that need to be replaced.
+        $replacements = array(
+            11 => 20,
+            12 => 50,
+            13 => 100
+        );
+
+        // Run the replacements.
+        foreach ($replacements as $old => $new) {
+            $DB->set_field('forum', 'maxattachments', $new, array('maxattachments' => $old));
+        }
+
+        // Forum savepoint reached.
+        upgrade_mod_savepoint(true, 2014051201, 'forum');
+    }
+
+    if ($oldversion < 2014051202) {
+
+        // Define table forum_discussion_subs to be created.
+        $table = new xmldb_table('forum_discussion_subs');
+
+        // Adding fields to table forum_discussion_subs.
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('forum', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('discussion', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('preference', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '1');
+
+        // Adding keys to table forum_discussion_subs.
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->add_key('forum', XMLDB_KEY_FOREIGN, array('forum'), 'forum', array('id'));
+        $table->add_key('userid', XMLDB_KEY_FOREIGN, array('userid'), 'user', array('id'));
+        $table->add_key('discussion', XMLDB_KEY_FOREIGN, array('discussion'), 'forum_discussions', array('id'));
+        $table->add_key('user_discussions', XMLDB_KEY_UNIQUE, array('userid', 'discussion'));
+
+        // Conditionally launch create table for forum_discussion_subs.
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        // Forum savepoint reached.
+        upgrade_mod_savepoint(true, 2014051202, 'forum');
+    }
 
     return true;
 }

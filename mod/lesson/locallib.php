@@ -19,8 +19,7 @@
  * Local library file for Lesson.  These are non-standard functions that are used
  * only by Lesson.
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or late
  **/
@@ -770,6 +769,12 @@ abstract class lesson_add_page_form_base extends moodleform {
         $this->_form->setType($name, PARAM_INT);
         if ($value !== null) {
             $this->_form->setDefault($name, $value);
+        }
+        $this->_form->addHelpButton($name, 'score', 'lesson');
+
+        // Score is only used for custom scoring. Disable the element when not in use to stop some confusion.
+        if (!$this->_customdata['lesson']->custom) {
+            $this->_form->freeze($name);
         }
     }
 
@@ -1984,12 +1989,17 @@ abstract class lesson_page extends lesson_base {
 
                 $attempt->timeseen = time();
                 // if allow modattempts, then update the old attempt record, otherwise, insert new answer record
+                $userisreviewing = false;
                 if (isset($USER->modattempts[$this->lesson->id])) {
                     $attempt->retry = $nretakes - 1; // they are going through on review, $nretakes will be too high
+                    $userisreviewing = true;
                 }
 
-                if ($this->lesson->retake || (!$this->lesson->retake && $nretakes == 0)) {
-                    $DB->insert_record("lesson_attempts", $attempt);
+                // Only insert a record if we are not reviewing the lesson.
+                if (!$userisreviewing) {
+                    if ($this->lesson->retake || (!$this->lesson->retake && $nretakes == 0)) {
+                        $DB->insert_record("lesson_attempts", $attempt);
+                    }
                 }
                 // "number of attempts remaining" message if $this->lesson->maxattempts > 1
                 // displaying of message(s) is at the end of page for more ergonomic display
@@ -2766,7 +2776,7 @@ class lesson_page_type_manager {
     public function load_all_pages(lesson $lesson) {
         global $DB;
         if (!($pages =$DB->get_records('lesson_pages', array('lessonid'=>$lesson->id)))) {
-            print_error('cannotfindpages', 'lesson');
+            return array(); // Records returned empty.
         }
         foreach ($pages as $key=>$page) {
             $pagetype = get_class($this->types[$page->qtype]);

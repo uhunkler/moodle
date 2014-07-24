@@ -35,8 +35,7 @@
 /**
  * This file keeps track of upgrades to the lti module
  *
- * @package    mod
- * @subpackage lti
+ * @package mod_lti
  * @copyright  2009 Marc Alier, Jordi Piguillem, Nikolas Galanis
  *  marc.alier@upc.edu
  * @copyright  2009 Universitat Politecnica de Catalunya http://www.upc.edu
@@ -82,6 +81,23 @@ function xmldb_lti_upgrade($oldversion) {
 
     // Moodle v2.6.0 release upgrade line.
     // Put any upgrade step following this.
+
+    // Moodle v2.7.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2014060201) {
+
+        // Changing type of field grade on table lti to int.
+        $table = new xmldb_table('lti');
+        $field = new xmldb_field('grade', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '100',
+                'instructorchoiceacceptgrades');
+
+        // Launch change of type for field grade.
+        $dbman->change_field_type($table, $field);
+
+        // Lti savepoint reached.
+        upgrade_mod_savepoint(true, 2014060201, 'lti');
+    }
 
     return true;
 }

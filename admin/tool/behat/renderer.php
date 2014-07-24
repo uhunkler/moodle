@@ -84,6 +84,33 @@ class tool_behat_renderer extends plugin_renderer_base {
                 $stepsdefinitions
             );
 
+            $stepsdefinitions = preg_replace_callback('/(FIELD_VALUE_STRING)/',
+                function ($matches) {
+                    global $CFG;
+
+                    // Creating a link to a popup with the help.
+                    $url = new moodle_url(
+                        '/help.php',
+                        array(
+                            'component' => 'tool_behat',
+                            'identifier' => 'fieldvalueargument',
+                            'lang' => current_language()
+                        )
+                    );
+
+                    // Note: this title is displayed only if JS is disabled,
+                    // otherwise the link will have the new ajax tooltip.
+                    $title = get_string('fieldvalueargument', 'tool_behat');
+                    $title = get_string('helpprefix2', '', trim($title, ". \t"));
+
+                    $attributes = array('href' => $url, 'title' => $title,
+                        'aria-haspopup' => 'true', 'target' => '_blank');
+
+                    $output = html_writer::tag('a', 'FIELD_VALUE_STRING', $attributes);
+                    return html_writer::tag('span', $output, array('class' => 'helptooltip'));
+                },
+                $stepsdefinitions
+            );
         }
 
         // Steps definitions.
@@ -150,12 +177,12 @@ class tool_behat_renderer extends plugin_renderer_base {
 
         // List of steps.
         $html .= $this->output->box_start();
-        $html .= html_writer::tag('h1', get_string('infoheading', 'tool_behat'));
+        $html .= html_writer::tag('h3', get_string('infoheading', 'tool_behat'));
         $html .= html_writer::tag('div', get_string('aim', 'tool_behat'));
-        $html .= html_writer::empty_tag('div');
-        $html .= html_writer::empty_tag('ul');
-        $html .= html_writer::empty_tag('li');
-        $html .= implode(html_writer::end_tag('li') . html_writer::empty_tag('li'), $infos);
+        $html .= html_writer::start_tag('div');
+        $html .= html_writer::start_tag('ul');
+        $html .= html_writer::start_tag('li');
+        $html .= implode(html_writer::end_tag('li') . html_writer::start_tag('li'), $infos);
         $html .= html_writer::end_tag('li');
         $html .= html_writer::end_tag('ul');
         $html .= html_writer::end_tag('div');

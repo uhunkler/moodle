@@ -18,8 +18,7 @@
 /**
  * Standard library of functions and constants for lesson
  *
- * @package    mod
- * @subpackage lesson
+ * @package mod_lesson
  * @copyright  1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  **/
@@ -410,36 +409,6 @@ function lesson_update_grades($lesson, $userid=0, $nullifnone=true) {
 }
 
 /**
- * Update all grades in gradebook.
- *
- * @global object
- */
-function lesson_upgrade_grades() {
-    global $DB;
-
-    $sql = "SELECT COUNT('x')
-              FROM {lesson} l, {course_modules} cm, {modules} m
-             WHERE m.name='lesson' AND m.id=cm.module AND cm.instance=l.id";
-    $count = $DB->count_records_sql($sql);
-
-    $sql = "SELECT l.*, cm.idnumber AS cmidnumber, l.course AS courseid
-              FROM {lesson} l, {course_modules} cm, {modules} m
-             WHERE m.name='lesson' AND m.id=cm.module AND cm.instance=l.id";
-    $rs = $DB->get_recordset_sql($sql);
-    if ($rs->valid()) {
-        $pbar = new progress_bar('lessonupgradegrades', 500, true);
-        $i=0;
-        foreach ($rs as $lesson) {
-            $i++;
-            upgrade_set_timeout(60*5); // set up timeout, may also abort execution
-            lesson_update_grades($lesson, 0, false);
-            $pbar->update($i, $count, "Updating Lesson grades ($i/$count).");
-        }
-    }
-    $rs->close();
-}
-
-/**
  * Create grade item for given lesson
  *
  * @category grade
@@ -528,6 +497,13 @@ function lesson_grade_item_delete($lesson) {
 }
 
 /**
+ * List the actions that correspond to a view of this module.
+ * This is used by the participation report.
+ *
+ * Note: This is not used by new logging system. Event with
+ *       crud = 'r' and edulevel = LEVEL_PARTICIPATING will
+ *       be considered as view action.
+ *
  * @return array
  */
 function lesson_get_view_actions() {
@@ -535,6 +511,13 @@ function lesson_get_view_actions() {
 }
 
 /**
+ * List the actions that correspond to a post of this module.
+ * This is used by the participation report.
+ *
+ * Note: This is not used by new logging system. Event with
+ *       crud = ('c' || 'u' || 'd') and edulevel = LEVEL_PARTICIPATING
+ *       will be considered as post action.
+ *
  * @return array
  */
 function lesson_get_post_actions() {

@@ -92,10 +92,11 @@ class mod_assign_renderer extends plugin_renderer_base {
     public function render_assign_gradingmessage(assign_gradingmessage $result) {
         $urlparams = array('id' => $result->coursemoduleid, 'action'=>'grading');
         $url = new moodle_url('/mod/assign/view.php', $urlparams);
+        $classes = $result->gradingerror ? 'notifyproblem' : 'notifysuccess';
 
         $o = '';
         $o .= $this->output->heading($result->heading, 4);
-        $o .= $this->output->notification($result->message);
+        $o .= $this->output->notification($result->message, $classes);
         $o .= $this->output->continue_button($url);
         return $o;
     }
@@ -236,6 +237,17 @@ class mod_assign_renderer extends plugin_renderer_base {
             $o .= $this->output->box_end();
         }
 
+        return $o;
+    }
+
+    /**
+     * Render the header for an individual plugin.
+     *
+     * @param assign_plugin_header $header
+     * @return string
+     */
+    public function render_assign_plugin_header(assign_plugin_header $header) {
+        $o = $header->plugin->view_header();
         return $o;
     }
 
@@ -547,6 +559,7 @@ class mod_assign_renderer extends plugin_renderer_base {
         $row->cells = array($cell1, $cell2);
         $t->data[] = $row;
 
+        $submission = $status->teamsubmission ? $status->teamsubmission : $status->submission;
         $duedate = $status->duedate;
         if ($duedate > 0) {
             // Due date.
@@ -581,8 +594,8 @@ class mod_assign_renderer extends plugin_renderer_base {
             $row = new html_table_row();
             $cell1 = new html_table_cell(get_string('timeremaining', 'assign'));
             if ($duedate - $time <= 0) {
-                if (!$status->submission ||
-                        $status->submission->status != ASSIGN_SUBMISSION_STATUS_SUBMITTED) {
+                if (!$submission ||
+                        $submission->status != ASSIGN_SUBMISSION_STATUS_SUBMITTED) {
                     if ($status->submissionsenabled) {
                         $overduestr = get_string('overdue', 'assign', format_time($time - $duedate));
                         $cell2 = new html_table_cell($overduestr);
@@ -591,16 +604,16 @@ class mod_assign_renderer extends plugin_renderer_base {
                         $cell2 = new html_table_cell(get_string('duedatereached', 'assign'));
                     }
                 } else {
-                    if ($status->submission->timemodified > $duedate) {
+                    if ($submission->timemodified > $duedate) {
                         $latestr = get_string('submittedlate',
                                               'assign',
-                                              format_time($status->submission->timemodified - $duedate));
+                                              format_time($submission->timemodified - $duedate));
                         $cell2 = new html_table_cell($latestr);
                         $cell2->attributes = array('class'=>'latesubmission');
                     } else {
                         $earlystr = get_string('submittedearly',
                                                'assign',
-                                               format_time($status->submission->timemodified - $duedate));
+                                               format_time($submission->timemodified - $duedate));
                         $cell2 = new html_table_cell($earlystr);
                         $cell2->attributes = array('class'=>'earlysubmission');
                     }
@@ -637,7 +650,6 @@ class mod_assign_renderer extends plugin_renderer_base {
         }
 
         // Last modified.
-        $submission = $status->teamsubmission ? $status->teamsubmission : $status->submission;
         if ($submission) {
             $row = new html_table_row();
             $cell1 = new html_table_cell(get_string('timemodified', 'assign'));

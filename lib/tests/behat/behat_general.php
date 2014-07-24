@@ -283,6 +283,38 @@ class behat_general extends behat_base {
     }
 
     /**
+     * Sets the focus and takes away the focus from an element, generating blur JS event.
+     *
+     * @When /^I take focus off "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)"$/
+     * @param string $element Element we look for
+     * @param string $selectortype The type of what we look for
+     */
+    public function i_take_focus_off_field($element, $selectortype) {
+        if (!$this->running_javascript()) {
+            throw new ExpectationException('Can\'t take focus off from "' . $element . '" in non-js mode', $this->getSession());
+        }
+        // Gets the node based on the requested selector type and locator.
+        $node = $this->get_selected_node($selectortype, $element);
+        $this->ensure_node_is_visible($node);
+
+        // Ensure element is focused before taking it off.
+        $node->focus();
+        $node->blur();
+    }
+
+    /**
+     * Clicks the specified element and confirms the expected dialogue.
+     *
+     * @When /^I click on "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" confirming the dialogue$/
+     * @throws ElementNotFoundException Thrown by behat_base::find
+     * @param string $link
+     */
+    public function i_click_on_confirming_the_dialogue($element, $selectortype) {
+        $this->i_click_on($element, $selectortype);
+        $this->accept_currently_displayed_alert_dialog();
+    }
+
+    /**
      * Click on the element of the specified type which is located inside the second element.
      *
      * @When /^I click on "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" in the "(?P<element_container_string>(?:[^"]|\\")*)" "(?P<text_selector_string>[^"]*)"$/
@@ -346,10 +378,12 @@ class behat_general extends behat_base {
     }
 
     /**
-     * Checks, that the specified element is not visible. Only available in tests using Javascript.
+     * Checks, that the existing element is not visible. Only available in tests using Javascript.
      *
-     * As a "not" method, it's performance is not specially good as we should ensure that the element
-     * have time to appear.
+     * As a "not" method, it's performance could not be good, but in this
+     * case the performance is good because the element must exist,
+     * otherwise there would be a ElementNotFoundException, also here we are
+     * not spinning until the element is visible.
      *
      * @Then /^"(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>(?:[^"]|\\")*)" should not be visible$/
      * @throws ElementNotFoundException
@@ -396,7 +430,12 @@ class behat_general extends behat_base {
     }
 
     /**
-     * Checks, that the specified element is not visible inside the specified container. Only available in tests using Javascript.
+     * Checks, that the existing element is not visible inside the existing container. Only available in tests using Javascript.
+     *
+     * As a "not" method, it's performance could not be good, but in this
+     * case the performance is good because the element must exist,
+     * otherwise there would be a ElementNotFoundException, also here we are
+     * not spinning until the element is visible.
      *
      * @Then /^"(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" in the "(?P<element_container_string>(?:[^"]|\\")*)" "(?P<text_selector_string>[^"]*)" should not be visible$/
      * @throws ElementNotFoundException
@@ -447,7 +486,8 @@ class behat_general extends behat_base {
         }
 
         // We spin as we don't have enough checking that the element is there, we
-        // should also ensure that the element is visible.
+        // should also ensure that the element is visible. Using microsleep as this
+        // is a repeated step and global performance is important.
         $this->spin(
             function($context, $args) {
 
@@ -460,7 +500,10 @@ class behat_general extends behat_base {
                 // If non of the nodes is visible we loop again.
                 throw new ExpectationException('"' . $args['text'] . '" text was found but was not visible', $context->getSession());
             },
-            array('nodes' => $nodes, 'text' => $text)
+            array('nodes' => $nodes, 'text' => $text),
+            false,
+            false,
+            true
         );
 
     }
@@ -481,9 +524,10 @@ class behat_general extends behat_base {
             "[count(descendant::*[contains(., $xpathliteral)]) = 0]";
 
         // We should wait a while to ensure that the page is not still loading elements.
-        // Giving preference to the reliability of the results rather than to the performance.
+        // Waiting less than self::TIMEOUT as we already waited for the DOM to be ready and
+        // all JS to be executed.
         try {
-            $nodes = $this->find_all('xpath', $xpath);
+            $nodes = $this->find_all('xpath', $xpath, false, false, self::REDUCED_TIMEOUT);
         } catch (ElementNotFoundException $e) {
             // All ok.
             return;
@@ -508,7 +552,10 @@ class behat_general extends behat_base {
                 // If non of the found nodes is visible we consider that the text is not visible.
                 return true;
             },
-            array('nodes' => $nodes, 'text' => $text)
+            array('nodes' => $nodes, 'text' => $text),
+            self::REDUCED_TIMEOUT,
+            false,
+            true
         );
 
     }
@@ -547,7 +594,8 @@ class behat_general extends behat_base {
             return;
         }
 
-        // We also check the element visibility when running JS tests.
+        // We also check the element visibility when running JS tests. Using microsleep as this
+        // is a repeated step and global performance is important.
         $this->spin(
             function($context, $args) {
 
@@ -559,7 +607,10 @@ class behat_general extends behat_base {
 
                 throw new ExpectationException('"' . $args['text'] . '" text was found in the "' . $args['element'] . '" element but was not visible', $context->getSession());
             },
-            array('nodes' => $nodes, 'text' => $text, 'element' => $element)
+            array('nodes' => $nodes, 'text' => $text, 'element' => $element),
+            false,
+            false,
+            true
         );
     }
 
@@ -587,7 +638,7 @@ class behat_general extends behat_base {
         // We should wait a while to ensure that the page is not still loading elements.
         // Giving preference to the reliability of the results rather than to the performance.
         try {
-            $nodes = $this->find_all('xpath', $xpath, false, $container);
+            $nodes = $this->find_all('xpath', $xpath, false, $container, self::REDUCED_TIMEOUT);
         } catch (ElementNotFoundException $e) {
             // All ok.
             return;
@@ -612,7 +663,10 @@ class behat_general extends behat_base {
                 // If all the found nodes are hidden we are happy.
                 return true;
             },
-            array('nodes' => $nodes, 'text' => $text, 'element' => $element)
+            array('nodes' => $nodes, 'text' => $text, 'element' => $element),
+            self::REDUCED_TIMEOUT,
+            false,
+            true
         );
     }
 
@@ -745,12 +799,12 @@ class behat_general extends behat_base {
      *
      * This step is for advanced users, use it if you don't find anything else suitable for what you need.
      *
-     * @Then /^"(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" should exists$/
+     * @Then /^"(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" should exist$/
      * @throws ElementNotFoundException Thrown by behat_base::find
      * @param string $element The locator of the specified selector
      * @param string $selectortype The selector type
      */
-    public function should_exists($element, $selectortype) {
+    public function should_exist($element, $selectortype) {
 
         // Getting Mink selector and locator.
         list($selector, $locator) = $this->transform_selector($selectortype, $element);
@@ -764,15 +818,35 @@ class behat_general extends behat_base {
      *
      * This step is for advanced users, use it if you don't find anything else suitable for what you need.
      *
-     * @Then /^"(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" should not exists$/
+     * @Then /^"(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" should not exist$/
      * @throws ExpectationException
      * @param string $element The locator of the specified selector
      * @param string $selectortype The selector type
      */
-    public function should_not_exists($element, $selectortype) {
+    public function should_not_exist($element, $selectortype) {
+
+        // Getting Mink selector and locator.
+        list($selector, $locator) = $this->transform_selector($selectortype, $element);
 
         try {
-            $this->should_exists($element, $selectortype);
+
+            // Using directly the spin method as we want a reduced timeout but there is no
+            // need for a 0.1 seconds interval because in the optimistic case we will timeout.
+            $params = array('selector' => $selector, 'locator' => $locator);
+            // The exception does not really matter as we will catch it and will never "explode".
+            $exception = new ElementNotFoundException($this->getSession(), $selectortype, null, $element);
+
+            // If all goes good it will throw an ElementNotFoundExceptionn that we will catch.
+            $this->spin(
+                function($context, $args) {
+                    return $context->getSession()->getPage()->findAll($args['selector'], $args['locator']);
+                },
+                $params,
+                self::REDUCED_TIMEOUT,
+                $exception,
+                false
+            );
+
             throw new ExpectationException('The "' . $element . '" "' . $selectortype . '" exists in the current page', $this->getSession());
         } catch (ElementNotFoundException $e) {
             // It passes.
@@ -828,13 +902,86 @@ class behat_general extends behat_base {
      * @param string $containerselectortype The container locator
      */
     public function should_not_exist_in_the($element, $selectortype, $containerelement, $containerselectortype) {
+
+        // Get the container node; here we throw an exception
+        // if the container node does not exist.
+        $containernode = $this->get_selected_node($containerselectortype, $containerelement);
+
+        list($selector, $locator) = $this->transform_selector($selectortype, $element);
+
+        // Will throw an ElementNotFoundException if it does not exist, but, actually
+        // it should not exist, so we try & catch it.
         try {
-            $this->should_exist_in_the($element, $selectortype, $containerelement, $containerselectortype);
+            // Would be better to use a 1 second sleep because the element should not be there,
+            // but we would need to duplicate the whole find_all() logic to do it, the benefit of
+            // changing to 1 second sleep is not significant.
+            $this->find($selector, $locator, false, $containernode, self::REDUCED_TIMEOUT);
             throw new ExpectationException('The "' . $element . '" "' . $selectortype . '" exists in the "' .
                 $containerelement . '" "' . $containerselectortype . '"', $this->getSession());
         } catch (ElementNotFoundException $e) {
             // It passes.
             return;
+        }
+    }
+
+    /**
+     * Change browser window size small: 640x480, medium: 1024x768, large: 2560x1600, custom: widthxheight
+     *
+     * Example: I change window size to "small" or I change window size to "1024x768"
+     *
+     * @throws ExpectationException
+     * @Then /^I change window size to "([^"](small|medium|large|\d+x\d+))"$/
+     * @param string $windowsize size of the window (small|medium|large|wxh).
+     */
+    public function i_change_window_size_to($windowsize) {
+        $this->resize_window($windowsize);
+    }
+
+    /**
+     * Checks whether there is an attribute on the given element that contains the specified text.
+     *
+     * @Then /^the "(?P<attribute_string>[^"]*)" attribute of "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" should contain "(?P<text_string>(?:[^"]|\\")*)"$/
+     * @throws ExpectationException
+     * @param string $attribute Name of attribute
+     * @param string $element The locator of the specified selector
+     * @param string $selectortype The selector type
+     * @param string $text Expected substring
+     */
+    public function the_attribute_of_should_contain($attribute, $element, $selectortype, $text) {
+        // Get the container node (exception if it doesn't exist).
+        $containernode = $this->get_selected_node($selectortype, $element);
+        $value = $containernode->getAttribute($attribute);
+        if ($value == null) {
+            throw new ExpectationException('The attribute "' . $attribute. '" does not exist',
+                    $this->getSession());
+        } else if (strpos($value, $text) === false) {
+            throw new ExpectationException('The attribute "' . $attribute .
+                    '" does not contain "' . $text . '" (actual value: "' . $value . '")',
+                    $this->getSession());
+        }
+    }
+
+    /**
+     * Checks that the attribute on the given element does not contain the specified text.
+     *
+     * @Then /^the "(?P<attribute_string>[^"]*)" attribute of "(?P<element_string>(?:[^"]|\\")*)" "(?P<selector_string>[^"]*)" should not contain "(?P<text_string>(?:[^"]|\\")*)"$/
+     * @throws ExpectationException
+     * @param string $attribute Name of attribute
+     * @param string $element The locator of the specified selector
+     * @param string $selectortype The selector type
+     * @param string $text Expected substring
+     */
+    public function the_attribute_of_should_not_contain($attribute, $element, $selectortype, $text) {
+        // Get the container node (exception if it doesn't exist).
+        $containernode = $this->get_selected_node($selectortype, $element);
+        $value = $containernode->getAttribute($attribute);
+        if ($value == null) {
+            throw new ExpectationException('The attribute "' . $attribute. '" does not exist',
+                    $this->getSession());
+        } else if (strpos($value, $text) !== false) {
+            throw new ExpectationException('The attribute "' . $attribute .
+                    '" contains "' . $text . '" (value: "' . $value . '")',
+                    $this->getSession());
         }
     }
 }
