@@ -74,7 +74,7 @@ foreach ($outcomes as $outcomeid => $outcome) {
                       FROM {grade_grades}
                      WHERE itemid = ?".
                      $hidesuspendedsql.
-                  "GROUP BY itemid";
+                  " GROUP BY itemid";
             $info = $DB->get_records_sql($sql, $params);
 
             if (!$info) {
@@ -170,7 +170,13 @@ foreach ($report_info as $outcomeid => $outcomedata) {
     $row++;
 }
 
-$event = \gradereport_outcomes\event\report_viewed::create(
+$html .= '</table>';
+
+print_grade_page_head($courseid, 'report', 'outcomes');
+
+echo $html;
+
+$event = \gradereport_outcomes\event\grade_report_viewed::create(
     array(
         'context' => $context,
         'courseid' => $courseid,
@@ -178,12 +184,4 @@ $event = \gradereport_outcomes\event\report_viewed::create(
 );
 $event->trigger();
 
-$html .= '</table>';
-
-print_grade_page_head($courseid, 'report', 'outcomes');
-
-
-echo $html;
 echo $OUTPUT->footer();
-
-

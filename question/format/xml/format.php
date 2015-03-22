@@ -856,9 +856,10 @@ class qformat_xml extends qformat_default {
             $qo->dataset[$qo->datasetindex]->itemcount = $dataset['#']['itemcount'][0]['#'];
             $qo->dataset[$qo->datasetindex]->datasetitem = array();
             $qo->dataset[$qo->datasetindex]->itemindex = 0;
-            $qo->dataset[$qo->datasetindex]->number_of_items =
-                    $dataset['#']['number_of_items'][0]['#'];
-            $datasetitems = $dataset['#']['dataset_items'][0]['#']['dataset_item'];
+            $qo->dataset[$qo->datasetindex]->number_of_items = $this->getpath($dataset,
+                    array('#', 'number_of_items', 0, '#'), 0);
+            $datasetitems = $this->getpath($dataset,
+                    array('#', 'dataset_items', 0, '#', 'dataset_item'), array());
             foreach ($datasetitems as $datasetitem) {
                 $qo->dataset[$qo->datasetindex]->itemindex++;
                 $qo->dataset[$qo->datasetindex]->datasetitem[
@@ -1054,6 +1055,10 @@ class qformat_xml extends qformat_default {
      */
     public function xml_escape($string) {
         if (!empty($string) && htmlspecialchars($string) != $string) {
+            // If the string contains something that looks like the end
+            // of a CDATA section, then we need to avoid errors by splitting
+            // the string between two CDATA sections.
+            $string = str_replace(']]>', ']]]]><![CDATA[>', $string);
             return "<![CDATA[{$string}]]>";
         } else {
             return $string;

@@ -787,6 +787,31 @@ class core_course_management_renderer extends plugin_renderer_base {
     }
 
     /**
+     * Renderers bulk actions that can be performed on courses in search returns
+     *
+     * @return string
+     */
+    public function course_search_bulk_actions() {
+        $html  = html_writer::start_div('course-bulk-actions bulk-actions');
+        $html .= html_writer::div(get_string('coursebulkaction'), 'accesshide', array('tabindex' => '0'));
+        $options = coursecat::make_categories_list('moodle/category:manage');
+        $select = html_writer::select(
+            $options,
+            'movecoursesto',
+            '',
+            array('' => 'choosedots'),
+            array('aria-labelledby' => 'moveselectedcoursesto')
+        );
+        $submit = array('type' => 'submit', 'name' => 'bulkmovecourses', 'value' => get_string('move'));
+        $html .= $this->detail_pair(
+            html_writer::span(get_string('moveselectedcoursesto'), '', array('id' => 'moveselectedcoursesto')),
+            $select . html_writer::empty_tag('input', $submit)
+        );
+        $html .= html_writer::end_div();
+        return $html;
+    }
+
+    /**
      * Renderers detailed course information.
      *
      * @param course_in_list $course The course to display details for.
@@ -1050,9 +1075,11 @@ class core_course_management_renderer extends plugin_renderer_base {
      * @param course_in_list $course The currently selected course if there is one.
      * @param int $page The current page, starting at 0.
      * @param int $perpage The number of courses to display per page.
+     * @param string $search The string we are searching for.
      * @return string
      */
-    public function search_listing(array $courses, $totalcourses, course_in_list $course = null, $page = 0, $perpage = 20) {
+    public function search_listing(array $courses, $totalcourses, course_in_list $course = null, $page = 0, $perpage = 20,
+        $search = '') {
         $page = max($page, 0);
         $perpage = max($perpage, 2);
         $totalpages = ceil($totalcourses / $perpage);
@@ -1082,7 +1109,8 @@ class core_course_management_renderer extends plugin_renderer_base {
             $first = false;
         }
         $html .= html_writer::end_tag('ul');
-        $html .= $this->search_pagination($totalcourses, $page, $perpage, true);
+        $html .= $this->search_pagination($totalcourses, $page, $perpage, true, $search);
+        $html .= $this->course_search_bulk_actions();
         $html .= html_writer::end_div();
         return $html;
     }
@@ -1094,13 +1122,16 @@ class core_course_management_renderer extends plugin_renderer_base {
      * @param int $page The current page.
      * @param int $perpage The number of courses being displayed.
      * @param bool $showtotals Whether or not to print total information.
+     * @param string $search The string we are searching for.
      * @return string
      */
-    protected function search_pagination($totalcourses, $page, $perpage, $showtotals = false) {
+    protected function search_pagination($totalcourses, $page, $perpage, $showtotals = false, $search = '') {
         $html = '';
         $totalpages = ceil($totalcourses / $perpage);
         if ($showtotals) {
-            if ($totalpages == 1) {
+            if ($totalpages == 0) {
+                $str = get_string('nocoursesfound', 'moodle', $search);
+            } else if ($totalpages == 1) {
                 $str = get_string('showingacourses', 'moodle', $totalcourses);
             } else {
                 $a = new stdClass;
@@ -1168,15 +1199,26 @@ class core_course_management_renderer extends plugin_renderer_base {
             'data-selected' => ($selectedcourse == $course->id) ? '1' : '0',
             'data-visible' => $course->visible ? '1' : '0'
         );
-
-        $bulkcourseinput = array('type' => 'checkbox', 'name' => 'bc[]', 'value' => $course->id, 'class' => 'bulk-action-checkbox');
+        $bulkcourseinput = '';
+        if (coursecat::get($course->category)->can_move_courses_out_of()) {
+            $bulkcourseinput = array(
+                'type' => 'checkbox',
+                'name' => 'bc[]',
+                'value' => $course->id,
+                'class' => 'bulk-action-checkbox',
+                'aria-label' => get_string('bulkactionselect', 'moodle', $text),
+                'data-action' => 'select'
+            );
+        }
         $viewcourseurl = new moodle_url($this->page->url, array('courseid' => $course->id));
         $categoryname = coursecat::get($course->category)->get_formatted_name();
 
         $html  = html_writer::start_tag('li', $attributes);
         $html .= html_writer::start_div('clearfix');
         $html .= html_writer::start_div('float-left');
-        $html .= html_writer::empty_tag('input', $bulkcourseinput).'&nbsp;';
+        if ($bulkcourseinput) {
+            $html .= html_writer::empty_tag('input', $bulkcourseinput).'&nbsp;';
+        }
         $html .= html_writer::end_div();
         $html .= html_writer::link($viewcourseurl, $text, array('class' => 'float-left coursename'));
         $html .= html_writer::tag('span', $categoryname, array('class' => 'float-left categoryname'));
@@ -1211,23 +1253,29 @@ class core_course_management_renderer extends plugin_renderer_base {
                     array('class' => 'action-edit')
                 );
             }
+            // Delete.
+            if ($course->can_delete()) {
+                $actions[] = $this->output->action_icon(
+                    new moodle_url('/course/delete.php', array('id' => $course->id)),
+                    new pix_icon('t/delete', get_string('delete')),
+                    null,
+                    array('class' => 'action-delete')
+                );
+            }
             // Show/Hide.
             if ($course->can_change_visibility()) {
-                if ($course->visible) {
                     $actions[] = $this->output->action_icon(
                         new moodle_url($baseurl, array('action' => 'hidecourse')),
-                        new pix_icon('t/show', get_string('hide')),
+                        new pix_icon('t/hide', get_string('hide')),
                         null,
                         array('data-action' => 'hide', 'class' => 'action-hide')
                     );
-                } else {
                     $actions[] = $this->output->action_icon(
                         new moodle_url($baseurl, array('action' => 'showcourse')),
-                        new pix_icon('t/hide', get_string('show')),
+                        new pix_icon('t/show', get_string('show')),
                         null,
                         array('data-action' => 'show', 'class' => 'action-show')
                     );
-                }
             }
         }
         if (empty($actions)) {

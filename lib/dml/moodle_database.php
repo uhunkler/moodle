@@ -2227,6 +2227,29 @@ abstract class moodle_database {
     }
 
     /**
+     * Returns the SQL that allows to find intersection of two or more queries
+     *
+     * @since Moodle 2.8
+     *
+     * @param array $selects array of SQL select queries, each of them only returns fields with the names from $fields
+     * @param string $fields comma-separated list of fields (used only by some DB engines)
+     * @return string SQL query that will return only values that are present in each of selects
+     */
+    public function sql_intersect($selects, $fields) {
+        if (!count($selects)) {
+            throw new coding_exception('sql_intersect() requires at least one element in $selects');
+        } else if (count($selects) == 1) {
+            return $selects[0];
+        }
+        static $aliascnt = 0;
+        $rv = '('.$selects[0].')';
+        for ($i = 1; $i < count($selects); $i++) {
+            $rv .= " INTERSECT (".$selects[$i].')';
+        }
+        return $rv;
+    }
+
+    /**
      * Does this driver support tool_replace?
      *
      * @since Moodle 2.6.1
@@ -2265,7 +2288,7 @@ abstract class moodle_database {
             if (core_text::strlen($search) < core_text::strlen($replace)) {
                 $colsize = $column->max_length;
                 $sql = "UPDATE {".$table."}
-                       SET $columnname = SUBSTRING(REPLACE($columnname, ?, ?), 1, $colsize)
+                       SET $columnname = " . $this->sql_substr("REPLACE(" . $columnname . ", ?, ?)", 1, $colsize) . "
                      WHERE $columnname IS NOT NULL";
             }
             $this->execute($sql, array($search, $replace));
@@ -2467,6 +2490,9 @@ abstract class moodle_database {
         // now enable transactions again
         $this->transactions = array();
         $this->force_rollback = false;
+
+        \core\event\manager::database_transaction_rolledback();
+        \core\message\manager::database_transaction_rolledback();
     }
 
     /**

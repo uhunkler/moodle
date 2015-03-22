@@ -49,6 +49,9 @@ abstract class info {
     /** @var tree Availability configuration, decoded from JSON; null if unset */
     protected $availabilitytree;
 
+    /** @var array|null Array of information about current restore if any */
+    protected static $restoreinfo = null;
+
     /**
      * Constructs with item details.
      *
@@ -307,16 +310,63 @@ abstract class info {
      * @param string $restoreid Restore identifier
      * @param int $courseid Target course id
      * @param \base_logger $logger Logger for any warnings
+     * @param int $dateoffset Date offset to be added to any dates (0 = none)
+     * @param \base_task $task Restore task
      */
-    public function update_after_restore($restoreid, $courseid, \base_logger $logger) {
+    public function update_after_restore($restoreid, $courseid, \base_logger $logger,
+            $dateoffset, \base_task $task) {
         $tree = $this->get_availability_tree();
+        // Set static data for use by get_restore_date_offset function.
+        self::$restoreinfo = array('restoreid' => $restoreid, 'dateoffset' => $dateoffset,
+                'task' => $task);
         $changed = $tree->update_after_restore($restoreid, $courseid, $logger,
                 $this->get_thing_name());
         if ($changed) {
             // Save modified data.
-            $structure = $tree->save();
-            $this->set_in_database(json_encode($structure));
+            if ($tree->is_empty()) {
+                // If the tree is empty, but the tree has changed, remove this condition.
+                $this->set_in_database(null);
+            } else {
+                $structure = $tree->save();
+                $this->set_in_database(json_encode($structure));
+            }
         }
+    }
+
+    /**
+     * Gets the date offset (amount by which any date values should be
+     * adjusted) for the current restore.
+     *
+     * @param string $restoreid Restore identifier
+     * @return int Date offset (0 if none)
+     * @throws coding_exception If not in a restore (or not in that restore)
+     */
+    public static function get_restore_date_offset($restoreid) {
+        if (!self::$restoreinfo) {
+            throw new coding_exception('Only valid during restore');
+        }
+        if (self::$restoreinfo['restoreid'] !== $restoreid) {
+            throw new coding_exception('Data not available for that restore id');
+        }
+        return self::$restoreinfo['dateoffset'];
+    }
+
+    /**
+     * Gets the restore task (specifically, the task that calls the
+     * update_after_restore method) for the current restore.
+     *
+     * @param string $restoreid Restore identifier
+     * @return \base_task Restore task
+     * @throws coding_exception If not in a restore (or not in that restore)
+     */
+    public static function get_restore_task($restoreid) {
+        if (!self::$restoreinfo) {
+            throw new coding_exception('Only valid during restore');
+        }
+        if (self::$restoreinfo['restoreid'] !== $restoreid) {
+            throw new coding_exception('Data not available for that restore id');
+        }
+        return self::$restoreinfo['task'];
     }
 
     /**
@@ -403,19 +453,19 @@ abstract class info {
      * Supported fields: availablefrom, availableuntil, showavailability
      * (and groupingid for sections).
      *
-     * If you enable $modgroupmembersonly, then it also supports the
-     * groupmembersonly field for modules. This is off by default because
-     * we are not yet moving the groupmembersonly option into this new API.
+     * It also supports the groupmembersonly field for modules. This part was
+     * optional in 2.7 but now always runs (because groupmembersonly has been
+     * removed).
      *
      * @param \stdClass $rec Object possibly containing legacy fields
      * @param bool $section True if this is a section
-     * @param bool $modgroupmembersonly True if groupmembersonly is converted for mods
+     * @param bool $modgroupmembersonlyignored Ignored option, previously used
      * @return string|null New availability value or null if none
      */
-    public static function convert_legacy_fields($rec, $section, $modgroupmembersonly = false) {
+    public static function convert_legacy_fields($rec, $section, $modgroupmembersonlyignored = false) {
         // Do nothing if the fields are not set.
         if (empty($rec->availablefrom) && empty($rec->availableuntil) &&
-                (!$modgroupmembersonly || empty($rec->groupmembersonly)) &&
+                (empty($rec->groupmembersonly)) &&
                 (!$section || empty($rec->groupingid))) {
             return null;
         }
@@ -426,7 +476,7 @@ abstract class info {
 
         // Groupmembersonly condition (if enabled) for modules, groupingid for
         // sections.
-        if (($modgroupmembersonly && !empty($rec->groupmembersonly)) ||
+        if (!empty($rec->groupmembersonly) ||
                 (!empty($rec->groupingid) && $section)) {
             if (!empty($rec->groupingid)) {
                 $conditions[] = '{"type":"grouping"' .
@@ -584,10 +634,76 @@ abstract class info {
         }
         $tree = $this->get_availability_tree();
         $checker = new capability_checker($this->get_context());
+
+        // Filter using availability tree.
         $this->modinfo = get_fast_modinfo($this->get_course());
-        $result = $tree->filter_user_list($users, false, $this, $checker);
+        $filtered = $tree->filter_user_list($users, false, $this, $checker);
         $this->modinfo = null;
+
+        // Include users in the result if they're either in the filtered list,
+        // or they have viewhidden. This logic preserves ordering of the
+        // passed users array.
+        $result = array();
+        $canviewhidden = $checker->get_users_by_capability($this->get_view_hidden_capability());
+        foreach ($users as $userid => $data) {
+            if (array_key_exists($userid, $filtered) || array_key_exists($userid, $canviewhidden)) {
+                $result[$userid] = $users[$userid];
+            }
+        }
+
         return $result;
+    }
+
+    /**
+     * Gets the capability used to view hidden activities/sections (as
+     * appropriate).
+     *
+     * @return string Name of capability used to view hidden items of this type
+     */
+    protected abstract function get_view_hidden_capability();
+
+    /**
+     * Obtains SQL that returns a list of enrolled users that has been filtered
+     * by the conditions applied in the availability API, similar to calling
+     * get_enrolled_users and then filter_user_list. As for filter_user_list,
+     * this ONLY filters out users with conditions that are marked as applying
+     * to user lists. For example, group conditions are included but date
+     * conditions are not included.
+     *
+     * The returned SQL is a query that returns a list of user IDs. It does not
+     * include brackets, so you neeed to add these to make it into a subquery.
+     * You would normally use it in an SQL phrase like "WHERE u.id IN ($sql)".
+     *
+     * The function returns an array with '' and an empty array, if there are
+     * no restrictions on users from these conditions.
+     *
+     * The SQL will be complex and may be slow. It uses named parameters (sorry,
+     * I know they are annoying, but it was unavoidable here).
+     *
+     * @param bool $onlyactive True if including only active enrolments
+     * @return array Array of SQL code (may be empty) and params
+     */
+    public function get_user_list_sql($onlyactive) {
+        global $CFG;
+        if (is_null($this->availability) || !$CFG->enableavailability) {
+            return array('', array());
+        }
+
+        // Get SQL for the availability filter.
+        $tree = $this->get_availability_tree();
+        list ($filtersql, $filterparams) = $tree->get_user_list_sql(false, $this, $onlyactive);
+        if ($filtersql === '') {
+            // No restrictions, so return empty query.
+            return array('', array());
+        }
+
+        // Get SQL for the view hidden list.
+        list ($viewhiddensql, $viewhiddenparams) = get_enrolled_sql(
+                $this->get_context(), $this->get_view_hidden_capability(), 0, $onlyactive);
+
+        // Result is a union of the two.
+        return array('(' . $filtersql . ') UNION (' . $viewhiddensql . ')',
+                array_merge($filterparams, $viewhiddenparams));
     }
 
     /**
@@ -613,7 +729,12 @@ abstract class info {
         $info = preg_replace_callback('~<AVAILABILITY_CMNAME_([0-9]+)/>~',
                 function($matches) use($modinfo, $context) {
                     $cm = $modinfo->get_cm($matches[1]);
-                    return format_string($cm->name, true, array('context' => $context));
+                    if ($cm->has_view() and $cm->uservisible) {
+                        // Help student by providing a link to the module which is preventing availability.
+                        return \html_writer::link($cm->url, format_string($cm->name, true, array('context' => $context)));
+                    } else {
+                        return format_string($cm->name, true, array('context' => $context));
+                    }
                 }, $info);
 
         return $info;

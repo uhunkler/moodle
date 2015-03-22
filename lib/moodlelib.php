@@ -414,7 +414,10 @@ define('FEATURE_IDNUMBER', 'idnumber');
 define('FEATURE_GROUPS', 'groups');
 /** True if module supports groupings */
 define('FEATURE_GROUPINGS', 'groupings');
-/** True if module supports groupmembersonly */
+/**
+ * True if module supports groupmembersonly (which no longer exists)
+ * @deprecated Since Moodle 2.8
+ */
 define('FEATURE_GROUPMEMBERSONLY', 'groupmembersonly');
 
 /** Type of module */
@@ -1168,10 +1171,11 @@ function clean_param($param, $type) {
 
         case PARAM_USERNAME:
             $param = fix_utf8($param);
-            $param = str_replace(" " , "", $param);
+            $param = trim($param);
             // Convert uppercase to lowercase MDL-16919.
             $param = core_text::strtolower($param);
             if (empty($CFG->extendedusernamechars)) {
+                $param = str_replace(" " , "", $param);
                 // Regular expression, eliminate all chars EXCEPT:
                 // alphanum, dash (-), underscore (_), at sign (@) and period (.) characters.
                 $param = preg_replace('/[^-\.@_a-z0-9]/', '', $param);
@@ -2849,10 +2853,6 @@ function require_login($courseorid = null, $autologinguest = true, $cm = null, $
                 $modinfo = get_fast_modinfo($course);
                 $cm = $modinfo->get_cm($cm->id);
             }
-            $PAGE->set_cm($cm, $course); // Set's up global $COURSE.
-            $PAGE->set_pagelayout('incourse');
-        } else {
-            $PAGE->set_course($course); // Set's up global $COURSE.
         }
     } else {
         // Do not touch global $COURSE via $PAGE->set_course(),
@@ -2956,6 +2956,13 @@ function require_login($courseorid = null, $autologinguest = true, $cm = null, $
 
     // Do not bother admins with any formalities.
     if (is_siteadmin()) {
+        // Set the global $COURSE.
+        if ($cm) {
+            $PAGE->set_cm($cm, $course);
+            $PAGE->set_pagelayout('incourse');
+        } else if (!empty($courseorid)) {
+            $PAGE->set_course($course);
+        }
         // Set accesstime or the user will appear offline which messes up messaging.
         user_accesstime_log($course->id);
         return;
@@ -3013,6 +3020,7 @@ function require_login($courseorid = null, $autologinguest = true, $cm = null, $
                 if ($preventredirect) {
                     throw new require_login_exception('Course is hidden');
                 }
+                $PAGE->set_context(null);
                 // We need to override the navigation URL as the course won't have been added to the navigation and thus
                 // the navigation will mess up when trying to find it.
                 navigation_node::override_active_url(new moodle_url('/'));
@@ -3033,6 +3041,7 @@ function require_login($courseorid = null, $autologinguest = true, $cm = null, $
                 if ($preventredirect) {
                     throw new require_login_exception('Invalid course login-as access');
                 }
+                $PAGE->set_context(null);
                 echo $OUTPUT->header();
                 notice(get_string('studentnotallowed', '', fullname($USER, true)), $CFG->wwwroot .'/');
             }
@@ -3134,7 +3143,16 @@ function require_login($courseorid = null, $autologinguest = true, $cm = null, $
         }
     }
 
-    // Check visibility of activity to current user; includes visible flag, groupmembersonly, conditional availability, etc.
+    // Set the global $COURSE.
+    // TODO MDL-49434: setting current course/cm should be after the check $cm->uservisible .
+    if ($cm) {
+        $PAGE->set_cm($cm, $course);
+        $PAGE->set_pagelayout('incourse');
+    } else if (!empty($courseorid)) {
+        $PAGE->set_course($course);
+    }
+
+    // Check visibility of activity to current user; includes visible flag, conditional availability, etc.
     if ($cm && !$cm->uservisible) {
         if ($preventredirect) {
             throw new require_login_exception('Activity is hidden');
@@ -3250,37 +3268,28 @@ function require_course_login($courseorid, $autologinguest = true, $cm = null, $
 
     } else if ($issite) {
         // Login for SITE not required.
-        if ($cm and empty($cm->visible)) {
-            // Hidden activities are not accessible without login.
-            require_login($courseorid, $autologinguest, $cm, $setwantsurltome, $preventredirect);
-        } else if ($cm and !empty($CFG->enablegroupmembersonly) and $cm->groupmembersonly) {
-            // Not-logged-in users do not have any group membership.
-            require_login($courseorid, $autologinguest, $cm, $setwantsurltome, $preventredirect);
-        } else {
-            // We still need to instatiate PAGE vars properly so that things that rely on it like navigation function correctly.
-            if (!empty($courseorid)) {
-                if (is_object($courseorid)) {
-                    $course = $courseorid;
-                } else {
-                    $course = clone($SITE);
-                }
-                if ($cm) {
-                    if ($cm->course != $course->id) {
-                        throw new coding_exception('course and cm parameters in require_course_login() call do not match!!');
-                    }
-                    $PAGE->set_cm($cm, $course);
-                    $PAGE->set_pagelayout('incourse');
-                } else {
-                    $PAGE->set_course($course);
-                }
+        // We still need to instatiate PAGE vars properly so that things that rely on it like navigation function correctly.
+        if (!empty($courseorid)) {
+            if (is_object($courseorid)) {
+                $course = $courseorid;
             } else {
-                // If $PAGE->course, and hence $PAGE->context, have not already been set up properly, set them up now.
-                $PAGE->set_course($PAGE->course);
+                $course = clone $SITE;
             }
-            // TODO: verify conditional activities here.
-            user_accesstime_log(SITEID);
-            return;
+            if ($cm) {
+                if ($cm->course != $course->id) {
+                    throw new coding_exception('course and cm parameters in require_course_login() call do not match!!');
+                }
+                $PAGE->set_cm($cm, $course);
+                $PAGE->set_pagelayout('incourse');
+            } else {
+                $PAGE->set_course($course);
+            }
+        } else {
+            // If $PAGE->course, and hence $PAGE->context, have not already been set up properly, set them up now.
+            $PAGE->set_course($PAGE->course);
         }
+        user_accesstime_log(SITEID);
+        return;
 
     } else {
         // Course login always required.
@@ -3608,9 +3617,20 @@ function fullname($user, $override=false) {
     if (isset($CFG->fullnamedisplay)) {
         $template = $CFG->fullnamedisplay;
     }
-    // If the template is empty, or set to language, or $override is set, return the language string.
-    if (empty($template) || $template == 'language' || $override) {
+    // If the template is empty, or set to language, return the language string.
+    if ((empty($template) || $template == 'language') && !$override) {
         return get_string('fullnamedisplay', null, $user);
+    }
+
+    // Check to see if we are displaying according to the alternative full name format.
+    if ($override) {
+        if (empty($CFG->alternativefullnameformat) || $CFG->alternativefullnameformat == 'language') {
+            // Default to show just the user names according to the fullnamedisplay string.
+            return get_string('fullnamedisplay', null, $user);
+        } else {
+            // If the override is true, then change the template to use the complete name.
+            $template = $CFG->alternativefullnameformat;
+        }
     }
 
     $requirednames = array();
@@ -3666,9 +3686,12 @@ function fullname($user, $override=false) {
  * @param string $tableprefix table query prefix to use in front of each field.
  * @param string $prefix prefix added to the name fields e.g. authorfirstname.
  * @param string $fieldprefix sql field prefix e.g. id AS userid.
+ * @param bool $order moves firstname and lastname to the top of the array / start of the string.
  * @return array|string All name fields.
  */
-function get_all_user_name_fields($returnsql = false, $tableprefix = null, $prefix = null, $fieldprefix = null) {
+function get_all_user_name_fields($returnsql = false, $tableprefix = null, $prefix = null, $fieldprefix = null, $order = false) {
+    // This array is provided in this order because when called by fullname() (above) if firstname is before
+    // firstnamephonetic str_replace() will change the wrong placeholder.
     $alternatenames = array('firstnamephonetic' => 'firstnamephonetic',
                             'lastnamephonetic' => 'lastnamephonetic',
                             'middlename' => 'middlename',
@@ -3680,6 +3703,19 @@ function get_all_user_name_fields($returnsql = false, $tableprefix = null, $pref
     if ($prefix) {
         foreach ($alternatenames as $key => $altname) {
             $alternatenames[$key] = $prefix . $altname;
+        }
+    }
+
+    // If we want the end result to have firstname and lastname at the front / top of the result.
+    if ($order) {
+        // Move the last two elements (firstname, lastname) off the array and put them at the top.
+        for ($i = 0; $i < 2; $i++) {
+            // Get the last element.
+            $lastelement = end($alternatenames);
+            // Remove it from the array.
+            unset($alternatenames[$lastelement]);
+            // Put the element back on the top of the array.
+            $alternatenames = array_merge(array($lastelement => $lastelement), $alternatenames);
         }
     }
 
@@ -4261,6 +4297,9 @@ function delete_user(stdClass $user) {
     // Purge user extra profile info.
     $DB->delete_records('user_info_data', array('userid' => $user->id));
 
+    // Purge log of previous password hashes.
+    $DB->delete_records('user_password_history', array('userid' => $user->id));
+
     // Last course access not necessary either.
     $DB->delete_records('user_lastaccess', array('userid' => $user->id));
     // Remove all user tokens.
@@ -4742,6 +4781,11 @@ function update_internal_user_password($user, $password, $fasthash = false) {
     require_once($CFG->libdir.'/password_compat/lib/password.php');
 
     // Figure out what the hashed password should be.
+    if (!isset($user->auth)) {
+        debugging('User record in update_internal_user_password() must include field auth',
+                DEBUG_DEVELOPER);
+        $user->auth = $DB->get_field('user', 'auth', array('id' => $user->id));
+    }
     $authplugin = get_auth_plugin($user->auth);
     if ($authplugin->prevent_local_passwords()) {
         $hashedpassword = AUTH_PASSWORD_NOT_CACHED;
@@ -4749,13 +4793,19 @@ function update_internal_user_password($user, $password, $fasthash = false) {
         $hashedpassword = hash_internal_user_password($password, $fasthash);
     }
 
-    // If verification fails then it means the password has changed.
-    if (isset($user->password)) {
-        // While creating new user, password in unset in $user object, to avoid
-        // saving it with user_create()
+    $algorithmchanged = false;
+
+    if ($hashedpassword === AUTH_PASSWORD_NOT_CACHED) {
+        // Password is not cached, update it if not set to AUTH_PASSWORD_NOT_CACHED.
+        $passwordchanged = ($user->password !== $hashedpassword);
+
+    } else if (isset($user->password)) {
+        // If verification fails then it means the password has changed.
         $passwordchanged = !password_verify($password, $user->password);
         $algorithmchanged = password_needs_rehash($user->password, PASSWORD_DEFAULT);
     } else {
+        // While creating new user, password in unset in $user object, to avoid
+        // saving it with user_create()
         $passwordchanged = true;
     }
 
@@ -5711,7 +5761,7 @@ function get_mailer($action='get') {
  * @param string $subject plain text subject line of the email
  * @param string $messagetext plain text version of the message
  * @param string $messagehtml complete html version of the message (optional)
- * @param string $attachment a file on the filesystem, relative to $CFG->dataroot
+ * @param string $attachment a file on the filesystem, either relative to $CFG->dataroot or a full path to a file in $CFG->tempdir
  * @param string $attachname the name of the file (extension indicates MIME)
  * @param bool $usetrueaddress determines whether $from email address should
  *          be sent out. Will be overruled by user profile setting for maildisplay
@@ -5764,21 +5814,20 @@ function email_to_user($user, $from, $subject, $messagetext, $messagehtml = '', 
 
     if (!validate_email($user->email)) {
         // We can not send emails to invalid addresses - it might create security issue or confuse the mailer.
-        $invalidemail = "User $user->id (".fullname($user).") email ($user->email) is invalid! Not sending.";
-        error_log($invalidemail);
-        if (CLI_SCRIPT) {
-            mtrace('Error: lib/moodlelib.php email_to_user(): '.$invalidemail);
-        }
+        debugging("email_to_user: User $user->id (".fullname($user).") email ($user->email) is invalid! Not sending.");
         return false;
     }
 
     if (over_bounce_threshold($user)) {
-        $bouncemsg = "User $user->id (".fullname($user).") is over bounce threshold! Not sending.";
-        error_log($bouncemsg);
-        if (CLI_SCRIPT) {
-            mtrace('Error: lib/moodlelib.php email_to_user(): '.$bouncemsg);
-        }
+        debugging("email_to_user: User $user->id (".fullname($user).") is over bounce threshold! Not sending.");
         return false;
+    }
+
+    // TLD .invalid  is specifically reserved for invalid domain names.
+    // For More information, see {@link http://tools.ietf.org/html/rfc2606#section-2}.
+    if (substr($user->email, -8) == '.invalid') {
+        debugging("email_to_user: User $user->id (".fullname($user).") email domain ($user->email) is invalid! Not sending.");
+        return true; // This is not an error.
     }
 
     // If the user is a remote mnet user, parse the email text for URL to the
@@ -5883,7 +5932,21 @@ function email_to_user($user, $from, $subject, $messagetext, $messagehtml = '', 
         } else {
             require_once($CFG->libdir.'/filelib.php');
             $mimetype = mimeinfo('type', $attachname);
-            $mail->addAttachment($CFG->dataroot .'/'. $attachment, $attachname, 'base64', $mimetype);
+
+            $attachmentpath = $attachment;
+
+            // Before doing the comparison, make sure that the paths are correct (Windows uses slashes in the other direction).
+            $attachpath = str_replace('\\', '/', $attachmentpath);
+            // Make sure both variables are normalised before comparing.
+            $temppath = str_replace('\\', '/', $CFG->tempdir);
+
+            // If the attachment is a full path to a file in the tempdir, use it as is,
+            // otherwise assume it is a relative path from the dataroot (for backwards compatibility reasons).
+            if (strpos($attachpath, $temppath) !== 0) {
+                $attachmentpath = $CFG->dataroot . '/' . $attachmentpath;
+            }
+
+            $mail->addAttachment($attachmentpath, $attachname, 'base64', $mimetype);
         }
     }
 
@@ -6777,6 +6840,26 @@ function get_string_manager($forcereload=false) {
                  $translist = array();
             } else {
                 $translist = explode(',', $CFG->langlist);
+            }
+
+            if (!empty($CFG->config_php_settings['customstringmanager'])) {
+                $classname = $CFG->config_php_settings['customstringmanager'];
+
+                if (class_exists($classname)) {
+                    $implements = class_implements($classname);
+
+                    if (isset($implements['core_string_manager'])) {
+                        $singleton = new $classname($CFG->langotherroot, $CFG->langlocalroot, $translist);
+                        return $singleton;
+
+                    } else {
+                        debugging('Unable to instantiate custom string manager: class '.$classname.
+                            ' does not implement the core_string_manager interface.');
+                    }
+
+                } else {
+                    debugging('Unable to instantiate custom string manager: class '.$classname.' can not be found.');
+                }
             }
 
             $singleton = new core_string_manager_standard($CFG->langotherroot, $CFG->langlocalroot, $translist);
@@ -8603,7 +8686,23 @@ function getremoteaddr($default='0.0.0.0') {
     }
     if (!($variablestoskip & GETREMOTEADDR_SKIP_HTTP_X_FORWARDED_FOR)) {
         if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            $address = cleanremoteaddr($_SERVER['HTTP_X_FORWARDED_FOR']);
+            $forwardedaddresses = explode(",", $_SERVER['HTTP_X_FORWARDED_FOR']);
+            $address = $forwardedaddresses[0];
+
+            if (substr_count($address, ":") > 1) {
+                // Remove port and brackets from IPv6.
+                if (preg_match("/\[(.*)\]:/", $address, $matches)) {
+                    $address = $matches[1];
+                }
+            } else {
+                // Remove port from IPv4.
+                if (substr_count($address, ":") == 1) {
+                    $parts = explode(":", $address);
+                    $address = $parts[0];
+                }
+            }
+
+            $address = cleanremoteaddr($address);
             return $address ? $address : $default;
         }
     }
@@ -8762,8 +8861,7 @@ function message_popup_window() {
     }
 
     // There are unread messages so now do a more complex but slower query.
-    $namefields = get_all_user_name_fields(true, 'u');
-    $messagesql = "SELECT m.id, m.smallmessage, m.fullmessageformat, m.notification, m.useridto, m.useridfrom, $namefields, c.blocked
+    $messagesql = "SELECT m.id, c.blocked
                      FROM {message} m
                      JOIN {message_working} mw ON m.id=mw.unreadmessageid
                      JOIN {message_processors} p ON mw.processorid=p.id
@@ -8780,13 +8878,15 @@ function message_popup_window() {
         $messagesql .= 'AND m.timecreated > :lastpopuptime';
     }
 
-    $messageusers = $DB->get_records_sql($messagesql, array('userid' => $USER->id, 'lastpopuptime' => $USER->message_lastpopup));
+    $waitingmessages = $DB->get_records_sql($messagesql, array('userid' => $USER->id, 'lastpopuptime' => $USER->message_lastpopup));
 
     $validmessages = 0;
-    foreach($messageusers as $message) {
-        if ($message->blocked) {
+    foreach ($waitingmessages as $messageinfo) {
+        if ($messageinfo->blocked) {
             // Message is from a user who has since been blocked so just mark it read.
-            message_mark_message_read($message, time());
+            // Get the full message to mark as read.
+            $messageobject = $DB->get_record('message', array('id' => $messageinfo->id));
+            message_mark_message_read($messageobject, time());
         } else {
             $validmessages++;
         }
@@ -8985,11 +9085,25 @@ function get_performance_info() {
         $hits = 0;
         $misses = 0;
         $sets = 0;
-        foreach ($stats as $definition => $stores) {
-            $html .= '<span class="cache-definition-stats">';
-            $html .= '<span class="cache-definition-stats-heading">'.$definition.'</span>';
+        foreach ($stats as $definition => $details) {
+            switch ($details['mode']) {
+                case cache_store::MODE_APPLICATION:
+                    $modeclass = 'application';
+                    $mode = ' <span title="application cache">[a]</span>';
+                    break;
+                case cache_store::MODE_SESSION:
+                    $modeclass = 'session';
+                    $mode = ' <span title="session cache">[s]</span>';
+                    break;
+                case cache_store::MODE_REQUEST:
+                    $modeclass = 'request';
+                    $mode = ' <span title="request cache">[r]</span>';
+                    break;
+            }
+            $html .= '<span class="cache-definition-stats cache-mode-'.$modeclass.'">';
+            $html .= '<span class="cache-definition-stats-heading">'.$definition.$mode.'</span>';
             $text .= "$definition {";
-            foreach ($stores as $store => $data) {
+            foreach ($details['stores'] as $store => $data) {
                 $hits += $data['hits'];
                 $misses += $data['misses'];
                 $sets += $data['sets'];

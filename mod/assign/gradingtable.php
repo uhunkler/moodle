@@ -83,6 +83,7 @@ class assign_grading_table extends table_sql implements renderable {
                                 $downloadfilename = null) {
         global $CFG, $PAGE, $DB, $USER;
         parent::__construct('mod_assign_grading');
+        $this->is_persistent(true);
         $this->assignment = $assignment;
 
         // Check permissions up front.
@@ -129,8 +130,6 @@ class assign_grading_table extends table_sql implements renderable {
         $params['assignmentid1'] = (int)$this->assignment->get_instance()->id;
         $params['assignmentid2'] = (int)$this->assignment->get_instance()->id;
         $params['assignmentid3'] = (int)$this->assignment->get_instance()->id;
-        $params['assignmentid4'] = (int)$this->assignment->get_instance()->id;
-        $params['assignmentid5'] = (int)$this->assignment->get_instance()->id;
 
         $extrauserfields = get_extra_user_fields($this->assignment->get_context());
 
@@ -151,24 +150,33 @@ class assign_grading_table extends table_sql implements renderable {
         $fields .= 'uf.workflowstate as workflowstate, ';
         $fields .= 'uf.allocatedmarker as allocatedmarker ';
 
-        $submissionmaxattempt = 'SELECT mxs.userid, MAX(mxs.attemptnumber) AS maxattempt
-                                 FROM {assign_submission} mxs
-                                 WHERE mxs.assignment = :assignmentid4 GROUP BY mxs.userid';
-        $grademaxattempt = 'SELECT mxg.userid, MAX(mxg.attemptnumber) AS maxattempt
-                            FROM {assign_grades} mxg
-                            WHERE mxg.assignment = :assignmentid5 GROUP BY mxg.userid';
         $from = '{user} u
-                         LEFT JOIN ( ' . $submissionmaxattempt . ' ) smx ON u.id = smx.userid
-                         LEFT JOIN ( ' . $grademaxattempt . ' ) gmx ON u.id = gmx.userid
-                         LEFT JOIN {assign_submission} s ON
-                            u.id = s.userid AND
-                            s.assignment = :assignmentid1 AND
-                            s.attemptnumber = smx.maxattempt
-                         LEFT JOIN {assign_grades} g ON
-                            u.id = g.userid AND
-                            g.assignment = :assignmentid2 AND
-                            g.attemptnumber = gmx.maxattempt
-                         LEFT JOIN {assign_user_flags} uf ON u.id = uf.userid AND uf.assignment = :assignmentid3';
+                         LEFT JOIN {assign_submission} s
+                                ON u.id = s.userid
+                               AND s.assignment = :assignmentid1
+                               AND s.latest = 1
+                         LEFT JOIN {assign_grades} g
+                                ON u.id = g.userid
+                               AND g.assignment = :assignmentid2 ';
+
+        // For group submissions we don't immediately create an entry in the assign_submission table for each user,
+        // instead the userid is set to 0. In this case we use a different query to retrieve the grade for the user.
+        if ($this->assignment->get_instance()->teamsubmission) {
+            $params['assignmentid4'] = (int) $this->assignment->get_instance()->id;
+            $grademaxattempt = 'SELECT mxg.userid, MAX(mxg.attemptnumber) AS maxattempt
+                                  FROM {assign_grades} mxg
+                                 WHERE mxg.assignment = :assignmentid4
+                              GROUP BY mxg.userid';
+            $from .= 'LEFT JOIN (' . $grademaxattempt . ') gmx
+                             ON u.id = gmx.userid
+                            AND g.attemptnumber = gmx.maxattempt ';
+        } else {
+            $from .= 'AND g.attemptnumber = s.attemptnumber ';
+        }
+
+        $from .= 'LEFT JOIN {assign_user_flags} uf
+                         ON u.id = uf.userid
+                        AND uf.assignment = :assignmentid3';
 
         $userparams = array();
         $userindex = 0;
@@ -185,10 +193,8 @@ class assign_grading_table extends table_sql implements renderable {
                 $params['submitted'] = ASSIGN_SUBMISSION_STATUS_SUBMITTED;
 
             } else if ($filter == ASSIGN_FILTER_NOT_SUBMITTED) {
-                $where .= ' AND (s.timemodified IS NULL OR s.status = :draft OR s.status = :reopened) ';
-                $params['draft'] = ASSIGN_SUBMISSION_STATUS_DRAFT;
-                $params['reopened'] = ASSIGN_SUBMISSION_STATUS_REOPENED;
-
+                $where .= ' AND (s.timemodified IS NULL OR s.status != :submitted) ';
+                $params['submitted'] = ASSIGN_SUBMISSION_STATUS_SUBMITTED;
             } else if ($filter == ASSIGN_FILTER_REQUIRE_GRADING) {
                 $where .= ' AND (s.timemodified IS NOT NULL AND
                                  s.status = :submitted AND
@@ -202,7 +208,8 @@ class assign_grading_table extends table_sql implements renderable {
             }
         }
 
-        if ($this->assignment->get_instance()->markingallocation) {
+        if ($this->assignment->get_instance()->markingworkflow &&
+            $this->assignment->get_instance()->markingallocation) {
             if (has_capability('mod/assign:manageallocations', $this->assignment->get_context())) {
                 // Check to see if marker filter is set.
                 $markerfilter = (int)get_user_preferences('assign_markerfilter', '');
@@ -276,19 +283,9 @@ class assign_grading_table extends table_sql implements renderable {
             $headers[] = get_string('recordid', 'assign');
         }
 
-        if ($this->hasviewblind) {
-                $columns[] = 'recordid';
-                $headers[] = get_string('recordid', 'assign');
-        }
-
         // Submission status.
-        if ($assignment->is_any_submission_plugin_enabled()) {
-            $columns[] = 'status';
-            $headers[] = get_string('status', 'assign');
-        } else if ($this->assignment->get_instance()->markingworkflow) {
-            $columns[] = 'workflowstatus';
-            $headers[] = get_string('status', 'assign');
-        }
+        $columns[] = 'status';
+        $headers[] = get_string('status', 'assign');
 
         // Team submission columns.
         if ($assignment->get_instance()->teamsubmission) {
@@ -296,7 +293,8 @@ class assign_grading_table extends table_sql implements renderable {
             $headers[] = get_string('submissionteam', 'assign');
         }
         // Allocated marker.
-        if ($this->assignment->get_instance()->markingallocation &&
+        if ($this->assignment->get_instance()->markingworkflow &&
+            $this->assignment->get_instance()->markingallocation &&
             has_capability('mod/assign:manageallocations', $this->assignment->get_context())) {
             // Add a column for the allocated marker.
             $columns[] = 'allocatedmarker';
@@ -504,7 +502,8 @@ class assign_grading_table extends table_sql implements renderable {
             $name = 'quickgrade_' . $row->id . '_workflowstate';
             $o .= html_writer::select($workflowstates, $name, $workflowstate, array('' => $notmarked));
             // Check if this user is a marker that can't manage allocations and doesn't have the marker column added.
-            if ($this->assignment->get_instance()->markingallocation &&
+            if ($this->assignment->get_instance()->markingworkflow &&
+                $this->assignment->get_instance()->markingallocation &&
                 !has_capability('mod/assign:manageallocations', $this->assignment->get_context())) {
 
                 $name = 'quickgrade_' . $row->id . '_allocatedmarker';
@@ -889,7 +888,7 @@ class assign_grading_table extends table_sql implements renderable {
         $group = false;
         $submission = false;
         $this->get_group_and_submission($row->id, $group, $submission, -1);
-        if ($group && $submission && $submission->timemodified) {
+        if ($submission && $submission->timemodified && $submission->status != ASSIGN_SUBMISSION_STATUS_NEW) {
             $o = userdate($submission->timemodified);
         } else if ($row->timesubmitted) {
             $o = userdate($row->timesubmitted);
@@ -917,7 +916,7 @@ class assign_grading_table extends table_sql implements renderable {
         $group = false;
         $submission = false;
         $this->get_group_and_submission($row->id, $group, $submission, -1);
-        if ($group && $submission) {
+        if ($submission) {
             $timesubmitted = $submission->timemodified;
             $status = $submission->status;
         } else {
@@ -941,24 +940,27 @@ class assign_grading_table extends table_sql implements renderable {
                 $o .= $this->output->container($lockedstr, 'lockedsubmission');
             }
 
-            // Add status of "grading", use markflow if enabled.
-            if ($instance->markingworkflow) {
-                $o .= $this->col_workflowstatus($row);
-            } else if ($row->grade !== null && $row->grade >= 0) {
-                $o .= $this->output->container(get_string('graded', 'assign'), 'submissiongraded');
-            } else if (!$timesubmitted) {
-                $now = time();
-                if ($due && ($now > $due)) {
-                    $overduestr = get_string('overdue', 'assign', format_time($now - $due));
-                    $o .= $this->output->container($overduestr, 'overduesubmission');
+            // Add status of "grading" if markflow is not enabled.
+            if (!$instance->markingworkflow) {
+                if ($row->grade !== null && $row->grade >= 0) {
+                    $o .= $this->output->container(get_string('graded', 'assign'), 'submissiongraded');
+                } else if (!$timesubmitted) {
+                    $now = time();
+                    if ($due && ($now > $due)) {
+                        $overduestr = get_string('overdue', 'assign', format_time($now - $due));
+                        $o .= $this->output->container($overduestr, 'overduesubmission');
+                    }
                 }
             }
+        }
 
-            if ($row->extensionduedate) {
-                $userdate = userdate($row->extensionduedate);
-                $extensionstr = get_string('userextensiondate', 'assign', $userdate);
-                $o .= $this->output->container($extensionstr, 'extensiondate');
-            }
+        if ($instance->markingworkflow) {
+            $o .= $this->col_workflowstatus($row);
+        }
+        if ($row->extensionduedate) {
+            $userdate = userdate($row->extensionduedate);
+            $extensionstr = get_string('userextensiondate', 'assign', $userdate);
+            $o .= $this->output->container($extensionstr, 'extensiondate');
         }
 
         if ($this->is_downloading()) {
@@ -1051,22 +1053,6 @@ class assign_grading_table extends table_sql implements renderable {
                 }
             }
 
-            if (($this->assignment->get_instance()->duedate ||
-                   $this->assignment->get_instance()->cutoffdate) &&
-                   $this->hasgrantextension) {
-                $urlparams = array('id' => $this->assignment->get_course_module()->id,
-                                   'userid'=>$row->id,
-                                   'action'=>'grantextension',
-                                   'sesskey'=>sesskey(),
-                                   'page'=>$this->currpage);
-                $url = new moodle_url('/mod/assign/view.php', $urlparams);
-                $description = get_string('grantextension', 'assign');
-                $actions['grantextension'] = new action_menu_link_secondary(
-                    $url,
-                    $noimage,
-                    $description
-                );
-            }
             if ($submissionsopen &&
                     $USER->id != $row->id &&
                     $caneditsubmission) {
@@ -1083,6 +1069,22 @@ class assign_grading_table extends table_sql implements renderable {
                     $description
                 );
             }
+        }
+        if (($this->assignment->get_instance()->duedate ||
+                $this->assignment->get_instance()->cutoffdate) &&
+                $this->hasgrantextension) {
+             $urlparams = array('id' => $this->assignment->get_course_module()->id,
+                                'userid' => $row->id,
+                                'action' => 'grantextension',
+                                'sesskey' => sesskey(),
+                                'page' => $this->currpage);
+             $url = new moodle_url('/mod/assign/view.php', $urlparams);
+             $description = get_string('grantextension', 'assign');
+             $actions['grantextension'] = new action_menu_link_secondary(
+                 $url,
+                 $noimage,
+                 $description
+             );
         }
         if ($row->status == ASSIGN_SUBMISSION_STATUS_SUBMITTED &&
                 $this->assignment->get_instance()->submissiondrafts) {

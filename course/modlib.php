@@ -66,7 +66,6 @@ function add_moduleinfo($moduleinfo, $course, $mform = null) {
     }
     $newcm->groupmode        = $moduleinfo->groupmode;
     $newcm->groupingid       = $moduleinfo->groupingid;
-    $newcm->groupmembersonly = $moduleinfo->groupmembersonly;
     $completion = new completion_info($course);
     if ($completion->is_enabled()) {
         $newcm->completion                = $moduleinfo->completion;
@@ -85,6 +84,15 @@ function add_moduleinfo($moduleinfo, $course, $mform = null) {
             }
         } else if (property_exists($moduleinfo, 'availability')) {
             $newcm->availability = $moduleinfo->availability;
+        }
+        // If there is any availability data, verify it.
+        if ($newcm->availability) {
+            $tree = new \core_availability\tree(json_decode($newcm->availability));
+            // Save time and database space by setting null if the only data
+            // is an empty tree.
+            if ($tree->is_empty()) {
+                $newcm->availability = null;
+            }
         }
     }
     if (isset($moduleinfo->showdescription)) {
@@ -209,11 +217,22 @@ function edit_module_post_actions($moduleinfo, $course) {
             }
             $moduleinfo->gradecat = $grade_category->id;
         }
+        $gradecategory = $grade_item->get_parent_category();
         foreach ($items as $itemid=>$unused) {
             $items[$itemid]->set_parent($moduleinfo->gradecat);
             if ($itemid == $grade_item->id) {
                 // Use updated grade_item.
                 $grade_item = $items[$itemid];
+            }
+            if (!empty($moduleinfo->add)) {
+                if (grade_category::aggregation_uses_aggregationcoef($gradecategory->aggregation)) {
+                    if ($gradecategory->aggregation == GRADE_AGGREGATE_WEIGHTED_MEAN) {
+                        $grade_item->aggregationcoef = 1;
+                    } else {
+                        $grade_item->aggregationcoef = 0;
+                    }
+                    $grade_item->update();
+                }
             }
         }
     }
@@ -272,6 +291,17 @@ function edit_module_post_actions($moduleinfo, $course) {
 
                 } else if (isset($moduleinfo->gradecat)) {
                     $outcome_item->set_parent($moduleinfo->gradecat);
+                }
+                $gradecategory = $outcome_item->get_parent_category();
+                if ($outcomeexists == false) {
+                    if (grade_category::aggregation_uses_aggregationcoef($gradecategory->aggregation)) {
+                        if ($gradecategory->aggregation == GRADE_AGGREGATE_WEIGHTED_MEAN) {
+                            $outcome_item->aggregationcoef = 1;
+                        } else {
+                            $outcome_item->aggregationcoef = 0;
+                        }
+                        $outcome_item->update();
+                    }
                 }
             }
         }
@@ -334,10 +364,6 @@ function set_moduleinfo_defaults($moduleinfo) {
 
     if (!isset($moduleinfo->groupingid)) {
         $moduleinfo->groupingid = 0;
-    }
-
-    if (!isset($moduleinfo->groupmembersonly)) {
-        $moduleinfo->groupmembersonly = 0;
     }
 
     if (!isset($moduleinfo->name)) { // Label.
@@ -455,17 +481,19 @@ function update_moduleinfo($cm, $moduleinfo, $course, $mform = null) {
     if (isset($moduleinfo->groupingid)) {
         $cm->groupingid = $moduleinfo->groupingid;
     }
-    if (isset($moduleinfo->groupmembersonly)) {
-        $cm->groupmembersonly = $moduleinfo->groupmembersonly;
-    }
 
     $completion = new completion_info($course);
-    if ($completion->is_enabled() && !empty($moduleinfo->completionunlocked)) {
-        // Update completion settings.
-        $cm->completion                = $moduleinfo->completion;
-        $cm->completiongradeitemnumber = $moduleinfo->completiongradeitemnumber;
-        $cm->completionview            = $moduleinfo->completionview;
-        $cm->completionexpected        = $moduleinfo->completionexpected;
+    if ($completion->is_enabled()) {
+        // Completion settings that would affect users who have already completed
+        // the activity may be locked; if so, these should not be updated.
+        if (!empty($moduleinfo->completionunlocked)) {
+            $cm->completion = $moduleinfo->completion;
+            $cm->completiongradeitemnumber = $moduleinfo->completiongradeitemnumber;
+            $cm->completionview = $moduleinfo->completionview;
+        }
+        // The expected date does not affect users who have completed the activity,
+        // so it is safe to update it regardless of the lock status.
+        $cm->completionexpected = $moduleinfo->completionexpected;
     }
     if (!empty($CFG->enableavailability)) {
         // This code is used both when submitting the form, which uses a long
@@ -479,6 +507,15 @@ function update_moduleinfo($cm, $moduleinfo, $course, $mform = null) {
             }
         } else if (property_exists($moduleinfo, 'availability')) {
             $cm->availability = $moduleinfo->availability;
+        }
+        // If there is any availability data, verify it.
+        if ($cm->availability) {
+            $tree = new \core_availability\tree(json_decode($cm->availability));
+            // Save time and database space by setting null if the only data
+            // is an empty tree.
+            if ($tree->is_empty()) {
+                $cm->availability = null;
+            }
         }
     }
     if (isset($moduleinfo->showdescription)) {

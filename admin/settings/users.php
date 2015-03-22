@@ -54,13 +54,11 @@ if ($hassiteconfig
         $temp->add(new admin_setting_configselect('defaultpreference_autosubscribe', new lang_string('autosubscribe'),
             '', 1, $choices));
 
-        if (!empty($CFG->forum_trackreadposts)) {
-            $choices = array();
-            $choices['0'] = new lang_string('trackforumsno');
-            $choices['1'] = new lang_string('trackforumsyes');
-            $temp->add(new admin_setting_configselect('defaultpreference_trackforums', new lang_string('trackforums'),
-                '', 0, $choices));
-        }
+        $choices = array();
+        $choices['0'] = new lang_string('trackforumsno');
+        $choices['1'] = new lang_string('trackforumsyes');
+        $temp->add(new admin_setting_configselect('defaultpreference_trackforums', new lang_string('trackforums'),
+            '', 0, $choices));
     }
     $ADMIN->add('accounts', $temp);
 
@@ -192,6 +190,9 @@ if ($hassiteconfig
                     'institution' => new lang_string('institution'),
                 )));
         $temp->add(new admin_setting_configtext('fullnamedisplay', new lang_string('fullnamedisplay', 'admin'), new lang_string('configfullnamedisplay', 'admin'), 'language', PARAM_TEXT, 50));
+        $temp->add(new admin_setting_configtext('alternativefullnameformat', new lang_string('alternativefullnameformat', 'admin'),
+                new lang_string('alternativefullnameformat_desc', 'admin'),
+                'language', PARAM_RAW, 50));
         $temp->add(new admin_setting_configtext('maxusersperpage', new lang_string('maxusersperpage','admin'), new lang_string('configmaxusersperpage','admin'), 100, PARAM_INT));
         $temp->add(new admin_setting_configcheckbox('enablegravatar', new lang_string('enablegravatar', 'admin'), new lang_string('enablegravatar_help', 'admin'), 0));
         $temp->add(new admin_setting_configtext('gravatardefaulturl', new lang_string('gravatardefaulturl', 'admin'), new lang_string('gravatardefaulturl_help', 'admin'), 'mm'));

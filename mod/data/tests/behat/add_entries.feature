@@ -4,6 +4,7 @@ Feature: Users can add entries to database activities
   As a user
   I need to add entries to databases
 
+  @javascript
   Scenario: Students can add entries to a database
     Given the following "users" exist:
       | username | firstname | lastname | email |
@@ -30,19 +31,19 @@ Feature: Users can add entries to database activities
     When I log in as "student1"
     And I follow "Course 1"
     And I add an entry to "Test database name" database with:
-      | Test field description | Student original entry |
+      | Test field name | Student original entry |
     And I press "Save and view"
     Then I should see "Student original entry"
     And I follow "Edit"
     And I set the following fields to these values:
-      | Test field description | Student edited entry |
+      | Test field name | Student edited entry |
     And I press "Save and view"
     And I should see "Student edited entry"
     And I add an entry to "Test database name" database with:
-      | Test field description | Student second entry |
+      | Test field name | Student second entry |
     And I press "Save and add another"
     And I add an entry to "Test database name" database with:
-      | Test field description | Student third entry |
+      | Test field name | Student third entry |
     And I press "Save and view"
     And I follow "View list"
     And I should see "Student edited entry"
@@ -54,3 +55,12 @@ Feature: Users can add entries to database activities
     And I should not see "Student edited entry"
     And I should see "Student second entry"
     And I should see "Student third entry"
+    # Now I will bulk delete the rest of the entries.
+    And I log out
+    And I log in as "teacher1"
+    And I follow "Course 1"
+    And I follow "Test database name"
+    And I press "Select all"
+    And I press "Delete selected"
+    And I press "Delete"
+    And I should see "No entries in database"

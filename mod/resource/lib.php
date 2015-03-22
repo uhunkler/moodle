@@ -33,7 +33,6 @@ function resource_supports($feature) {
         case FEATURE_MOD_ARCHETYPE:           return MOD_ARCHETYPE_RESOURCE;
         case FEATURE_GROUPS:                  return false;
         case FEATURE_GROUPINGS:               return false;
-        case FEATURE_GROUPMEMBERSONLY:        return true;
         case FEATURE_MOD_INTRO:               return true;
         case FEATURE_COMPLETION_TRACKS_VIEWS: return true;
         case FEATURE_GRADE_HAS_GRADE:         return false;
@@ -384,7 +383,7 @@ function resource_pluginfile($course, $cm, $context, $filearea, $args, $forcedow
 
     // should we apply filters?
     $mimetype = $file->get_mimetype();
-    if ($mimetype === 'text/html' or $mimetype === 'text/plain') {
+    if ($mimetype === 'text/html' or $mimetype === 'text/plain' or $mimetype === 'application/xhtml+xml') {
         $filter = $DB->get_field('resource', 'filterfiles', array('id'=>$cm->instance));
         $CFG->embeddedsoforcelinktarget = true;
     } else {

@@ -27,6 +27,8 @@ mod_scorm_activate_item = null;
 mod_scorm_parse_toc_tree = null;
 scorm_layout_widget = null;
 
+window.scorm_current_node = null;
+
 function underscore(str) {
     str = String(str).replace(/.N/g,".");
     return str.replace(/\./g,"__");
@@ -48,7 +50,6 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
     }
 
     scoes_nav = Y.JSON.parse(scoes_nav);
-    var scorm_current_node;
     var scorm_buttons = [];
     var scorm_bloody_labelclick = false;
     var scorm_nav_panel;
@@ -124,15 +125,23 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
                 return;
             }
             // Check if the item is already active, avoid recursive calls.
-            if (Y.one('#scorm_object')) {
+            var content = Y.one('#scorm_content');
+            var old = Y.one('#scorm_object');
+            if (old) {
                 var scorm_active_url = Y.one('#scorm_object').getAttribute('src');
                 var node_full_url = M.cfg.wwwroot + '/mod/scorm/loadSCO.php?' + node.title;
                 if (node_full_url === scorm_active_url) {
                     return;
                 }
+                // Start to unload iframe here
+                if(!window_name){
+                    content.removeChild(old);
+                    old = null;
+                }
             }
+            // End of - Avoid recursive calls.
+
             scorm_current_node = node;
-            // Avoid recursive calls.
             if (!scorm_current_node.state.selected) {
                 scorm_current_node.select();
             }
@@ -144,7 +153,6 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
                 el_old_api.parentNode.removeChild(el_old_api);
             }
 
-            var content = Y.one('#scorm_content');
             var obj = document.createElement('iframe');
             obj.setAttribute('id', 'scorm_object');
             obj.setAttribute('type', 'text/html');
@@ -154,12 +162,11 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
             if (window_name) {
                 var mine = window.open('','','width=1,height=1,left=0,top=0,scrollbars=no');
                 if(! mine) {
-                    alert(M.str.scorm.popupsblocked);
+                    alert(M.util.get_string('popupsblocked', 'scorm'));
                 }
                 mine.close();
             }
 
-            var old = Y.one('#scorm_object');
             if (old) {
                 if(window_name) {
                     var cwidth = scormplayerdata.cwidth;
@@ -167,8 +174,6 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
                     var poptions = scormplayerdata.popupoptions;
                     poptions = poptions + ',resizable=yes'; // Added for IE (MDL-32506).
                     scorm_openpopup(M.cfg.wwwroot + "/mod/scorm/loadSCO.php?" + node.title, window_name, poptions, cwidth, cheight);
-                } else {
-                    content.replaceChild(obj, old);
                 }
             } else {
                 content.prepend(obj);
@@ -290,7 +295,7 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
             }
 
             // Calculate the rough new height from the viewport height.
-            newheight = Y.one('body').get('winHeight') -5;
+            newheight = Y.one('body').get('winHeight') - 5;
             if (newheight < 600) {
                 newheight = 600;
             }
@@ -326,7 +331,7 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
 
         var scorm_lastchild = function(node) {
             if (node.children.length) {
-                return scorm_lastchild(node.children[node.children.length-1]);
+                return scorm_lastchild(node.children[node.children.length - 1]);
             } else {
                 return node;
             }
@@ -577,14 +582,18 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
             if (node.title == '' || node.title == null) {
                 return; //this item has no navigation
             }
+
             // If item is already active, return; avoid recursive calls.
-            if (Y.one('#scorm_data')) {
-                var scorm_active_url = Y.one('#scorm_object').getAttribute('src');
+            if (obj = Y.one('#scorm_object')) {
+                var scorm_active_url = obj.getAttribute('src');
                 var node_full_url = M.cfg.wwwroot + '/mod/scorm/loadSCO.php?' + node.title;
                 if (node_full_url === scorm_active_url) {
                     return;
                 }
+            } else if(scorm_current_node == node){
+                return;
             }
+
             // Update launch_sco.
             if (typeof node.scoid !== 'undefined') {
                 launch_sco = node.scoid;
@@ -623,9 +632,9 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
         // navigation
         if (scorm_hide_nav == false) {
             // TODO: make some better&accessible buttons.
-            var navbuttonshtml = '<span id="scorm_nav"><button id="nav_skipprev">&lt;&lt;</button>&nbsp;<button id="nav_prev">&lt;</button>'
-                    + '&nbsp;<button id="nav_up">^</button>&nbsp;<button id="nav_next">&gt;</button>'
-                    + '&nbsp;<button id="nav_skipnext">&gt;&gt;</button></span>';
+            var navbuttonshtml = '<span id="scorm_nav"><button id="nav_skipprev">&lt;&lt;</button>&nbsp;' +
+                                    '<button id="nav_prev">&lt;</button>&nbsp;<button id="nav_up">^</button>&nbsp;' +
+                                    '<button id="nav_next">&gt;</button>&nbsp;<button id="nav_skipnext">&gt;&gt;</button></span>';
             if (nav_display === 1) {
                 Y.one('#scorm_navpanel').setHTML(navbuttonshtml);
             } else {
@@ -728,13 +737,15 @@ M.mod_scorm.init = function(Y, nav_display, navposition_left, navposition_top, h
 
         // finally activate the chosen item
         var scorm_first_url = null;
-        if (tree.rootNode.children[0].title !== scoes_nav[launch_sco].url) {
-            var node = tree.getNodeByAttribute('title', scoes_nav[launch_sco].url);
-            if (node !== null) {
-                scorm_first_url = node;
+        if (typeof tree.rootNode.children[0] !== 'undefined') {
+            if (tree.rootNode.children[0].title !== scoes_nav[launch_sco].url) {
+                var node = tree.getNodeByAttribute('title', scoes_nav[launch_sco].url);
+                if (node !== null) {
+                    scorm_first_url = node;
+                }
+            } else {
+                scorm_first_url = tree.rootNode.children[0];
             }
-        } else {
-            scorm_first_url = tree.rootNode.children[0];
         }
 
         if (scorm_first_url == null) { // This is probably a single sco with no children (AICC Direct uses this).
@@ -791,6 +802,9 @@ M.mod_scorm.connectPrereqCallback = {
             }
             var el_new_tree = document.createElement('div');
             var pagecontent = document.getElementById("page-content");
+            if (!pagecontent) {
+                pagecontent = document.getElementById("content");
+            }
             el_new_tree.setAttribute('id','scormtree123');
             el_new_tree.innerHTML = o.responseText;
             // Make sure it does not show.

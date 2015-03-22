@@ -111,7 +111,7 @@ abstract class page_wiki {
         $PAGE->set_activity_record($wiki);
         // the search box
         if (!empty($subwiki->id)) {
-            $search = optional_param('searchstring', null, PARAM_ALPHANUMEXT);
+            $search = optional_param('searchstring', null, PARAM_TEXT);
             $PAGE->set_button(wiki_search_form($cm, $search, $subwiki));
         }
     }
@@ -136,7 +136,7 @@ abstract class page_wiki {
 
         echo $OUTPUT->header();
         $wiki = $PAGE->activityrecord;
-        echo $OUTPUT->heading($wiki->name);
+        echo $OUTPUT->heading(format_string($wiki->name));
 
         echo $this->wikioutput->wiki_info();
 

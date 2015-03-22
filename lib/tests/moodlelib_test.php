@@ -656,6 +656,8 @@ class core_moodlelib_testcase extends advanced_testcase {
         $this->assertSame('john@doe', clean_param('john@doe', PARAM_USERNAME));
         $this->assertSame('johndoe', clean_param('john~doe', PARAM_USERNAME));
         $this->assertSame('johndoe', clean_param('john´doe', PARAM_USERNAME));
+        $this->assertSame(clean_param('john# $%&()+_^', PARAM_USERNAME), 'john_');
+        $this->assertSame(clean_param(' john# $%&()+_^ ', PARAM_USERNAME), 'john_');
         $this->assertSame(clean_param('john#$%&() ', PARAM_USERNAME), 'john');
         $this->assertSame('johnd', clean_param('JOHNdóé ', PARAM_USERNAME));
         $this->assertSame(clean_param('john.,:;-_/|\ñÑ[]A_X-,D {} ~!@#$%^&*()_+ ?><[] ščřžžý ?ýá?ý??doe ', PARAM_USERNAME), 'john.-_a_x-d@_doe');
@@ -664,7 +666,8 @@ class core_moodlelib_testcase extends advanced_testcase {
         $CFG->extendedusernamechars = true;
         $this->assertSame('john_doe', clean_param('john_doe', PARAM_USERNAME));
         $this->assertSame('john@doe', clean_param('john@doe', PARAM_USERNAME));
-        $this->assertSame(clean_param('john# $%&()+_^', PARAM_USERNAME), 'john#$%&()+_^');
+        $this->assertSame(clean_param('john# $%&()+_^', PARAM_USERNAME), 'john# $%&()+_^');
+        $this->assertSame(clean_param(' john# $%&()+_^ ', PARAM_USERNAME), 'john# $%&()+_^');
         $this->assertSame('john~doe', clean_param('john~doe', PARAM_USERNAME));
         $this->assertSame('john´doe', clean_param('joHN´doe', PARAM_USERNAME));
         $this->assertSame('johndoe', clean_param('johnDOE', PARAM_USERNAME));
@@ -2262,6 +2265,46 @@ class core_moodlelib_testcase extends advanced_testcase {
         $this->assertSame($user->id, $event->relateduserid);
         $this->assertEquals(context_user::instance($user->id), $event->get_context());
         $this->assertEventContextNotUsed($event);
+
+        // Verify recovery of property 'auth'.
+        unset($user->auth);
+        update_internal_user_password($user, 'newpassword');
+        $this->assertDebuggingCalled('User record in update_internal_user_password() must include field auth',
+                DEBUG_DEVELOPER);
+        $this->assertEquals('manual', $user->auth);
+    }
+
+    /**
+     * Testing that if the password is not cached, that it does not update
+     * the user table and fire event.
+     */
+    public function test_update_internal_user_password_no_cache() {
+        $this->resetAfterTest();
+
+        $user = $this->getDataGenerator()->create_user(array('auth' => 'cas'));
+        $this->assertEquals(AUTH_PASSWORD_NOT_CACHED, $user->password);
+
+        $sink = $this->redirectEvents();
+        update_internal_user_password($user, 'wonkawonka');
+        $this->assertEquals(0, $sink->count(), 'User updated event should not fire');
+    }
+
+    /**
+     * Test if the user has a password hash, but now their auth method
+     * says not to cache it.  Then it should update.
+     */
+    public function test_update_internal_user_password_update_no_cache() {
+        $this->resetAfterTest();
+
+        $user = $this->getDataGenerator()->create_user(array('password' => 'test'));
+        $this->assertNotEquals(AUTH_PASSWORD_NOT_CACHED, $user->password);
+        $user->auth = 'cas'; // Change to a auth that does not store passwords.
+
+        $sink = $this->redirectEvents();
+        update_internal_user_password($user, 'wonkawonka');
+        $this->assertGreaterThanOrEqual(1, $sink->count(), 'User updated event should fire');
+
+        $this->assertEquals(AUTH_PASSWORD_NOT_CACHED, $user->password);
     }
 
     public function test_fullname() {
@@ -2281,6 +2324,7 @@ class core_moodlelib_testcase extends advanced_testcase {
         // Back up config settings for restore later.
         $originalcfg = new stdClass();
         $originalcfg->fullnamedisplay = $CFG->fullnamedisplay;
+        $originalcfg->alternativefullnameformat = $CFG->alternativefullnameformat;
 
         // Testing existing fullnamedisplay settings.
         $CFG->fullnamedisplay = 'firstname';
@@ -2305,6 +2349,25 @@ class core_moodlelib_testcase extends advanced_testcase {
         // Test override parameter.
         $CFG->fullnamedisplay = 'firstname';
         $expectedname = "$user->firstname $user->lastname";
+        $testname = fullname($user, true);
+        $this->assertSame($expectedname, $testname);
+
+        // Test alternativefullnameformat setting.
+        // Test alternativefullnameformat that has been set to nothing.
+        $CFG->alternativefullnameformat = '';
+        $expectedname = "$user->firstname $user->lastname";
+        $testname = fullname($user, true);
+        $this->assertSame($expectedname, $testname);
+
+        // Test alternativefullnameformat that has been set to 'language'.
+        $CFG->alternativefullnameformat = 'language';
+        $expectedname = "$user->firstname $user->lastname";
+        $testname = fullname($user, true);
+        $this->assertSame($expectedname, $testname);
+
+        // Test customising the alternativefullnameformat setting with all additional name fields.
+        $CFG->alternativefullnameformat = 'firstname lastname firstnamephonetic lastnamephonetic middlename alternatename';
+        $expectedname = "$user->firstname $user->lastname $user->firstnamephonetic $user->lastnamephonetic $user->middlename $user->alternatename";
         $testname = fullname($user, true);
         $this->assertSame($expectedname, $testname);
 
@@ -2388,6 +2451,7 @@ class core_moodlelib_testcase extends advanced_testcase {
 
         // Tidy up after we finish testing.
         $CFG->fullnamedisplay = $originalcfg->fullnamedisplay;
+        $CFG->alternativefullnameformat = $originalcfg->alternativefullnameformat;
     }
 
     public function test_get_all_user_name_fields() {
@@ -2422,6 +2486,21 @@ class core_moodlelib_testcase extends advanced_testcase {
         // Additional name fields with an alias and a title - string.
         $teststring = 'u.firstnamephonetic AS authorfirstnamephonetic,u.lastnamephonetic AS authorlastnamephonetic,u.middlename AS authormiddlename,u.alternatename AS authoralternatename,u.firstname AS authorfirstname,u.lastname AS authorlastname';
         $this->assertEquals($teststring, get_all_user_name_fields(true, 'u', null, 'author'));
+
+        // Test the order parameter of the function.
+        // Returning an array.
+        $testarray = array('firstname' => 'firstname',
+                'lastname' => 'lastname',
+                'firstnamephonetic' => 'firstnamephonetic',
+                'lastnamephonetic' => 'lastnamephonetic',
+                'middlename' => 'middlename',
+                'alternatename' => 'alternatename'
+        );
+        $this->assertEquals($testarray, get_all_user_name_fields(false, null, null, null, true));
+
+        // Returning a string.
+        $teststring = 'firstname,lastname,firstnamephonetic,lastnamephonetic,middlename,alternatename';
+        $this->assertEquals($teststring, get_all_user_name_fields(true, null, null, null, true));
     }
 
     public function test_order_in_string() {
@@ -2528,6 +2607,11 @@ class core_moodlelib_testcase extends advanced_testcase {
         $subject2 = 'subject 2';
         $messagetext2 = 'message text 2';
 
+        // Close the default email sink.
+        $sink = $this->redirectEmails();
+        $sink->close();
+
+        $CFG->noemailever = true;
         $this->assertNotEmpty($CFG->noemailever);
         email_to_user($user1, $user2, $subject, $messagetext);
         $this->assertDebuggingCalled('Not sending email due to $CFG->noemailever config setting');
@@ -2580,9 +2664,6 @@ class core_moodlelib_testcase extends advanced_testcase {
         $this->resetAfterTest();
 
         $user = $this->getDataGenerator()->create_user();
-
-        // Set config to allow email_to_user() to be called.
-        $CFG->noemailever = false;
 
         // Update user password.
         $sink = $this->redirectEvents();
@@ -2737,5 +2818,50 @@ class core_moodlelib_testcase extends advanced_testcase {
 
         $count = count_words('one…two ブルース … カンベッル');
         $this->assertEquals(4, $count);
+    }
+    /**
+     * Tests the getremoteaddr() function.
+     */
+    public function test_getremoteaddr() {
+        $xforwardedfor = isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? $_SERVER['HTTP_X_FORWARDED_FOR'] : null;
+
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '';
+        $noip = getremoteaddr('1.1.1.1');
+        $this->assertEquals('1.1.1.1', $noip);
+
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '';
+        $noip = getremoteaddr();
+        $this->assertEquals('0.0.0.0', $noip);
+
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '127.0.0.1';
+        $singleip = getremoteaddr();
+        $this->assertEquals('127.0.0.1', $singleip);
+
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '127.0.0.1,127.0.0.2';
+        $twoip = getremoteaddr();
+        $this->assertEquals('127.0.0.1', $twoip);
+
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '127.0.0.1,127.0.0.2, 127.0.0.3';
+        $threeip = getremoteaddr();
+        $this->assertEquals('127.0.0.1', $threeip);
+
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '127.0.0.1:65535,127.0.0.2';
+        $portip = getremoteaddr();
+        $this->assertEquals('127.0.0.1', $portip);
+
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '0:0:0:0:0:0:0:1,127.0.0.2';
+        $portip = getremoteaddr();
+        $this->assertEquals('0:0:0:0:0:0:0:1', $portip);
+
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '0::1,127.0.0.2';
+        $portip = getremoteaddr();
+        $this->assertEquals('0:0:0:0:0:0:0:1', $portip);
+
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = '[0:0:0:0:0:0:0:1]:65535,127.0.0.2';
+        $portip = getremoteaddr();
+        $this->assertEquals('0:0:0:0:0:0:0:1', $portip);
+
+        $_SERVER['HTTP_X_FORWARDED_FOR'] = $xforwardedfor;
+
     }
 }

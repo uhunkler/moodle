@@ -139,6 +139,10 @@ $CFG->admin = 'admin';
 // any existing key.
 //      $CFG->mnetkeylifetime = 28;
 //
+// Not recommended: Set the following to true to allow the use
+// off non-Moodle standard characters in usernames.
+//      $CFG->extendedusernamechars = true;
+//
 // Allow user passwords to be included in backup files. Very dangerous
 // setting as far as it publishes password hashes that can be unencrypted
 // if the backup file is publicy available. Use it only if you can guarantee
@@ -168,6 +172,11 @@ $CFG->admin = 'admin';
 // permanently, try restoring the backup on a different site, back it up again
 // and then restore on the target server.
 //    $CFG->forcedifferentsitecheckingusersonrestore = true;
+//
+// Force the backup system to continue to create backups in the legacy zip
+// format instead of the new tgz format. Does not affect restore, which
+// auto-detects the underlying file format.
+//    $CFG->usezipbackups = true;
 //
 // Prevent stats processing and hide the GUI
 //      $CFG->disablestatsprocessing = true;
@@ -238,7 +247,7 @@ $CFG->admin = 'admin';
 //      $CFG->session_memcached_save_path = '127.0.0.1:11211';
 //      $CFG->session_memcached_prefix = 'memc.sess.key.';
 //      $CFG->session_memcached_acquire_lock_timeout = 120;
-//      $CFG->session_memcached_lock_expire = 7200;       // Ignored if memcached extension <= 2.1.0
+//      $CFG->session_memcached_lock_expire = 7200;       // Ignored if PECL memcached is below version 2.2.0
 //
 //   Memcache session handler (requires memcached server and memcache extension):
 //      $CFG->session_handler_class = '\core\session\memcache';
@@ -279,7 +288,7 @@ $CFG->admin = 'admin';
 //      $CFG->reverseproxy = true;
 //
 // Enable when using external SSL appliance for performance reasons.
-// Please note that site may be accessible via https: or https:, but not both!
+// Please note that site may be accessible via http: or https:, but not both!
 //      $CFG->sslproxy = true;
 //
 // This setting will cause the userdate() function not to fix %d in
@@ -336,15 +345,6 @@ $CFG->admin = 'admin';
 //   then all non-teachers will always see these for every person.
 //       $CFG->forcefirstname = 'Bruce';
 //       $CFG->forcelastname  = 'Simpson';
-//
-// The following setting will turn SQL Error logging on. This will output an
-// entry in apache error log indicating the position of the error and the statement
-// called. This option will action disregarding error_reporting setting.
-//     $CFG->dblogerror = true;
-//
-// The following setting will log every database query to a table called adodb_logsql.
-// Use this setting on a development server only, the table grows quickly!
-//     $CFG->logsql = true;
 //
 // The following setting will turn on username logging into Apache log. For full details regarding setting
 // up of this function please refer to the install section of the document.
@@ -503,7 +503,7 @@ $CFG->admin = 'admin';
 //      Uses lock files stored by default in the dataroot. Whether this
 //      works on clusters depends on the file system used for the dataroot.
 //
-// "\\core\\lock\\db_row_lock_factory" - DB locking based on table rows.
+// "\\core\\lock\\db_record_lock_factory" - DB locking based on table rows.
 //
 // "\\core\\lock\\postgres_lock_factory" - DB locking based on postgres advisory locks.
 //
@@ -512,6 +512,23 @@ $CFG->admin = 'admin';
 // Location for lock files used by the File locking factory. This must exist
 // on a shared file system that supports locking.
 //      $CFG->lock_file_root = $CFG->dataroot . '/lock';
+//
+// Moodle 2.9 allows administrators to customise the list of supported file types.
+// To add a new filetype or override the definition of an existing one, set the
+// customfiletypes variable like this:
+//
+// $CFG->customfiletypes = array(
+//     (object)array(
+//         'extension' => 'frog',
+//         'icon' => 'archive',
+//         'type' => 'application/frog',
+//         'customdescription' => 'Amphibian-related file archive'
+//     )
+// );
+//
+// The extension, icon, and type fields are required. The icon field can refer to
+// any icon inside the pix/f folder. You can also set the customdescription field
+// (shown above) and (for advanced use) the groups, string, and defaulticon fields.
 //
 //=========================================================================
 // 7. SETTINGS FOR DEVELOPMENT SERVERS - not intended for production use!!!
@@ -685,7 +702,7 @@ $CFG->admin = 'admin';
 // (the basic and behat_* ones) to avoid problems with production environments. This setting can be
 // used to expand the default white list with an array of extra settings.
 // Example:
-//   $CFG->behat_extraallowedsettings = array('logsql', 'dblogerror');
+//   $CFG->behat_extraallowedsettings = array('somecoresetting', ...);
 //
 // You should explicitly allow the usage of the deprecated behat steps, otherwise an exception will
 // be thrown when using them. The setting is disabled by default.
@@ -702,6 +719,50 @@ $CFG->admin = 'admin';
 // * a screenshot (JavaScript is required for the screenshot functionality, so not all browsers support this option)
 // Example:
 //   $CFG->behat_faildump_path = '/my/path/to/save/failure/dumps';
+//
+// You can specify db, selenium wd_host etc. for behat parallel run by setting following variable.
+// Example:
+//   $CFG->behat_parallel_run = array (
+//       array (
+//           'dbtype' => 'mysqli',
+//           'dblibrary' => 'native',
+//           'dbhost' => 'localhost',
+//           'dbname' => 'moodletest',
+//           'dbuser' => 'moodle',
+//           'dbpass' => 'moodle',
+//           'behat_prefix' => 'mdl_',
+//           'wd_host' => 'http://127.0.0.1:4444/wd/hub',
+//           'behat_wwwroot' => 'http://127.0.0.1/moodle',
+//           'behat_dataroot' => '/home/example/bht_moodledata'
+//       ),
+//   );
+//
+// To change name of behat parallel run site, define BEHAT_PARALLEL_SITE_NAME and parallel run sites will be suffixed
+// with this value
+// Example:
+//   define('BEHAT_PARALLEL_SITE_NAME', 'behatparallelsite');
+//
+// Command line output for parallel behat install is limited to 80 chars, if you are installing more then 4 sites and
+// want to expand output to more then 80 chars, then define BEHAT_MAX_CMD_LINE_OUTPUT
+// Example:
+//   define('BEHAT_MAX_CMD_LINE_OUTPUT', 120);
+//
+// Behat feature files will be distributed randomly between the processes by default. If you have timing file or want
+// to create timing file then define BEHAT_FEATURE_TIMING_FILE with path to timing file. It will be updated for each
+// run with latest time taken to execute feature.
+// Example:
+//   define('BEHAT_FEATURE_TIMING_FILE', '/PATH_TO_TIMING_FILE/timing.json');
+//
+// If you don't have timing file and want some stable distribution of features, then you can use step counts to
+// distribute the features. You can generate step file by executing php admin/tool/behat/cli/util.php --updatesteps
+// this will update step file which is defined by BEHAT_FEATURE_STEP_FILE.
+// Example:
+//   define('BEHAT_FEATURE_STEP_FILE', '/PATH_TO_FEATURE_STEP_COUNT_FILE/stepcount.json');
+//
+// Feature distribution for each process is displayed as histogram. you can disable it by setting
+// BEHAT_DISABLE_HISTOGRAM
+// Example:
+//   define('BEHAT_DISABLE_HISTOGRAM', true);
 //
 //=========================================================================
 // 12. DEVELOPER DATA GENERATOR

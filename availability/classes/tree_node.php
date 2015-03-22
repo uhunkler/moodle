@@ -83,9 +83,33 @@ abstract class tree_node {
     public abstract function save();
 
     /**
+     * Checks whether this node should be included after restore or not. The
+     * node may be removed depending on restore settings, which you can get from
+     * the $task object.
+     *
+     * By default nodes are still included after restore.
+     *
+     * @param string $restoreid Restore ID
+     * @param int $courseid ID of target course
+     * @param \base_logger $logger Logger for any warnings
+     * @param string $name Name of this item (for use in warning messages)
+     * @param \base_task $task Current restore task
+     * @return bool True if there was any change
+     */
+    public function include_after_restore($restoreid, $courseid, \base_logger $logger, $name,
+            \base_task $task) {
+        return true;
+    }
+
+    /**
      * Updates this node after restore, returning true if anything changed.
      * The default behaviour is simply to return false. If there is a problem
      * with the update, $logger can be used to output a warning.
+     *
+     * Note: If you need information about the date offset, call
+     * \core_availability\info::get_restore_date_offset($restoreid). For
+     * information on the restoring task and its settings, call
+     * \core_availability\info::get_restore_task($restoreid).
      *
      * @param string $restoreid Restore ID
      * @param int $courseid ID of target course
@@ -136,7 +160,8 @@ abstract class tree_node {
 
     /**
      * Tests this condition against a user list. Users who do not meet the
-     * condition will be removed from the list.
+     * condition will be removed from the list, unless they have the ability
+     * to view hidden activities/sections.
      *
      * This function must be implemented if is_applied_to_user_lists returns
      * true. Otherwise it will not be called.
@@ -146,6 +171,10 @@ abstract class tree_node {
      *
      * Within this function, if you need to check capabilities, please use
      * the provided checker which caches results where possible.
+     *
+     * Conditions do not need to check the viewhiddenactivities or
+     * viewhiddensections capabilities. These are handled by
+     * core_availability\info::filter_user_list.
      *
      * @param array $users Array of userid => object
      * @param bool $not True if this condition is applying in negative mode
@@ -158,5 +187,65 @@ abstract class tree_node {
             \core_availability\info $info, capability_checker $checker) {
         throw new \coding_exception('Not implemented (do not call unless '.
                 'is_applied_to_user_lists is true)');
+    }
+
+    /**
+     * Obtains SQL that returns a list of enrolled users that has been filtered
+     * by the conditions applied in the availability API, similar to calling
+     * get_enrolled_users and then filter_user_list. As for filter_user_list,
+     * this ONLY filters out users with conditions that are marked as applying
+     * to user lists. For example, group conditions are included but date
+     * conditions are not included.
+     *
+     * The returned SQL is a query that returns a list of user IDs. It does not
+     * include brackets, so you neeed to add these to make it into a subquery.
+     * You would normally use it in an SQL phrase like "WHERE u.id IN ($sql)".
+     *
+     * The SQL will be complex and may be slow. It uses named parameters (sorry,
+     * I know they are annoying, but it was unavoidable here).
+     *
+     * If there are no conditions, the returned result is array('', array()).
+     *
+     * Conditions do not need to check the viewhiddenactivities or
+     * viewhiddensections capabilities. These are handled by
+     * core_availability\info::get_user_list_sql.
+     *
+     * @param bool $not True if this condition is applying in negative mode
+     * @param \core_availability\info $info Item we're checking
+     * @param bool $onlyactive If true, only returns active enrolments
+     * @return array Array with two elements: SQL subquery and parameters array
+     * @throws \coding_exception If called on a condition that doesn't apply to user lists
+     */
+    public function get_user_list_sql($not, \core_availability\info $info, $onlyactive) {
+        if (!$this->is_applied_to_user_lists()) {
+            throw new \coding_exception('Not implemented (do not call unless '.
+                    'is_applied_to_user_lists is true)');
+        }
+
+        // Handle situation where plugin does not implement this, by returning a
+        // default (all enrolled users). This ensures compatibility with 2.7
+        // plugins and behaviour. Plugins should be updated to support this
+        // new function (if they return true to is_applied_to_user_lists).
+        debugging('Availability plugins that return true to is_applied_to_user_lists ' .
+                'should also now implement get_user_list_sql: ' . get_class($this),
+                DEBUG_DEVELOPER);
+        return get_enrolled_sql($info->get_context(), '', 0, $onlyactive);
+    }
+
+    /**
+     * Utility function for generating SQL parameters (because we can't use ?
+     * parameters because get_enrolled_sql has infected us with horrible named
+     * parameters).
+     *
+     * @param array $params Params array (value will be added to this array)
+     * @param string|int $value Value
+     * @return SQL code for the parameter, e.g. ':pr1234'
+     */
+    protected static function unique_sql_parameter(array &$params, $value) {
+        static $count = 1;
+        $unique = 'usp' . $count;
+        $params[$unique] = $value;
+        $count++;
+        return ':' . $unique;
     }
 }

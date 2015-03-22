@@ -11,22 +11,12 @@ if ($hassiteconfig) { // speedup for non-admins, add all caps used on this page
     //TODO: Re-enable cc-import once re-implemented in 2.0.x
     //$temp->add(new admin_setting_configcheckbox('enableimsccimport', new lang_string('enable_cc_import', 'imscc'), new lang_string('enable_cc_import_description', 'imscc'), 0));
     $temp->add(new admin_setting_configcheckbox('enablesafebrowserintegration', new lang_string('enablesafebrowserintegration', 'admin'), new lang_string('configenablesafebrowserintegration', 'admin'), 0));
-    $temp->add(new admin_setting_configcheckbox('enablegroupmembersonly', new lang_string('enablegroupmembersonly', 'admin'), new lang_string('configenablegroupmembersonly', 'admin'), 0));
 
     $temp->add(new admin_setting_configcheckbox('dndallowtextandlinks', new lang_string('dndallowtextandlinks', 'admin'), new lang_string('configdndallowtextandlinks', 'admin'), 0));
     // The CSS optimiser setting. When changed we need to reset the theme caches in order to ensure they are regenerated through the optimiser.
     $enablecssoptimiser = new admin_setting_configcheckbox('enablecssoptimiser', new lang_string('enablecssoptimiser','admin'), new lang_string('enablecssoptimiser_desc','admin'), 0);
     $enablecssoptimiser->set_updatedcallback('theme_reset_all_caches');
     $temp->add($enablecssoptimiser);
-
-    // Backup archive .mbz format: switching to .tar.gz enables larger files, better
-    // progress reporting and possibly better performance. This is an experimental
-    // setting but if successful, should be removed and enabled by default in a future
-    // version. Note: this setting controls newly-created backups only; restore always
-    // supports both formats.
-    $temp->add(new admin_setting_configcheckbox('enabletgzbackups',
-            new lang_string('enabletgzbackups', 'admin'),
-            new lang_string('enabletgzbackups_desc', 'admin'), 0));
 
     $ADMIN->add('experimental', $temp);
 

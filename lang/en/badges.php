@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,7 +17,7 @@
 /**
  * Language file for 'badges' component
  *
- * @package    core
+ * @package    core_badges
  * @subpackage badges
  * @copyright  2012 onwards Totara Learning Solutions Ltd {@link http://www.totaralms.com/}
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -247,6 +246,7 @@ $string['error:requesttimeout'] = 'The connection request timed out before it co
 $string['error:requesterror'] = 'The connection request failed (error code {$a}).';
 $string['error:save'] = 'Cannot save the badge.';
 $string['error:userdeleted'] = '{$a->user} (This user no longer exists in {$a->site})';
+$string['eventbadgeawarded'] = 'Badge awarded';
 $string['evidence'] = 'Evidence';
 $string['existingrecipients'] = 'Existing badge recipients';
 $string['expired'] = 'Expired';
@@ -263,7 +263,6 @@ $string['externalbadges'] = 'My badges from other web sites';
 $string['externalbadgesp'] = 'Badges from other web sites:';
 $string['externalbadges_help'] = 'This area displays badges from your external backpack.';
 $string['fixed'] = 'Fixed date';
-$string['hidden'] = 'Hidden';
 $string['hiddenbadge'] = 'Unfortunately, the badge owner has not made this information available.';
 $string['issuedbadge'] = 'Issued badge information';
 $string['issuancedetails'] = 'Badge expiry';
@@ -389,3 +388,7 @@ $string['viewbadge'] = 'View issued badge';
 $string['visible'] = 'Visible';
 $string['warnexpired'] = ' (This badge has expired!)';
 $string['year'] = 'Year(s)';
+
+// Deprecated since Moodle 2.8.
+
+$string['hidden'] = 'Hidden';

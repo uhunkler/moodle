@@ -290,7 +290,7 @@ if ($action !== false && confirm_sesskey()) {
                 $moveto = coursecat::get($movetoid);
                 try {
                     // If this fails we want to catch the exception and report it.
-                    $redirectback = \core_course\management\helper::action_category_move_courses_into($category, $moveto,
+                    $redirectback = \core_course\management\helper::move_courses_into_category($moveto,
                         $courseids);
                     if ($redirectback) {
                         $a = new stdClass;
@@ -499,7 +499,7 @@ if ($displaycourselisting) {
     } else {
         list($courses, $coursescount, $coursestotal) =
             \core_course\management\helper::search_courses($search, $blocklist, $modulelist, $page, $perpage);
-        echo $renderer->search_listing($courses, $coursestotal, $course, $page, $perpage);
+        echo $renderer->search_listing($courses, $coursestotal, $course, $page, $perpage, $search);
     }
     echo $renderer->grid_column_end();
     if ($displaycoursedetail) {

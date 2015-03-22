@@ -634,21 +634,32 @@ function quiz_format_grade($quiz, $grade) {
 }
 
 /**
- * Round a grade to to the correct number of decimal places, and format it for display.
+ * Determine the correct number of decimal places required to format a grade.
+ *
+ * @param object $quiz The quiz table row, only $quiz->decimalpoints is used.
+ * @return integer
+ */
+function quiz_get_grade_format($quiz) {
+    if (empty($quiz->questiondecimalpoints)) {
+        $quiz->questiondecimalpoints = -1;
+    }
+
+    if ($quiz->questiondecimalpoints == -1) {
+        return $quiz->decimalpoints;
+    }
+
+    return $quiz->questiondecimalpoints;
+}
+
+/**
+ * Round a grade to the correct number of decimal places, and format it for display.
  *
  * @param object $quiz The quiz table row, only $quiz->decimalpoints is used.
  * @param float $grade The grade to round.
  * @return float
  */
 function quiz_format_question_grade($quiz, $grade) {
-    if (empty($quiz->questiondecimalpoints)) {
-        $quiz->questiondecimalpoints = -1;
-    }
-    if ($quiz->questiondecimalpoints == -1) {
-        return format_float($grade, $quiz->decimalpoints);
-    } else {
-        return format_float($grade, $quiz->questiondecimalpoints);
-    }
+    return format_float($grade, quiz_get_grade_format($quiz));
 }
 
 /**
@@ -1557,7 +1568,6 @@ function quiz_supports($feature) {
     switch($feature) {
         case FEATURE_GROUPS:                    return true;
         case FEATURE_GROUPINGS:                 return true;
-        case FEATURE_GROUPMEMBERSONLY:          return true;
         case FEATURE_MOD_INTRO:                 return true;
         case FEATURE_COMPLETION_TRACKS_VIEWS:   return true;
         case FEATURE_COMPLETION_HAS_RULES:      return true;
@@ -1792,7 +1802,6 @@ function quiz_get_navigation_options() {
     );
 }
 
-
 /**
  * Obtains the automatic completion state for this quiz on any conditions
  * in quiz settings, such as if all attempts are used or a certain grade is achieved.
@@ -1832,7 +1841,7 @@ function quiz_get_completion_state($course, $cm, $userid, $type) {
     if ($quiz->completionpass) {
         require_once($CFG->libdir . '/gradelib.php');
         $item = grade_item::fetch(array('courseid' => $course->id, 'itemtype' => 'mod',
-                'itemmodule' => 'quiz', 'iteminstance' => $cm->instance));
+                'itemmodule' => 'quiz', 'iteminstance' => $cm->instance, 'outcomeid' => null));
         if ($item) {
             $grades = grade_grade::fetch_users_grades($item, array($userid), false);
             if (!empty($grades[$userid])) {

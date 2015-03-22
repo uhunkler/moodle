@@ -39,6 +39,13 @@ require_once($CFG->libdir . '/completionlib.php');
 class core_backup_moodle2_testcase extends advanced_testcase {
 
     /**
+     * Tidy up open files that may be left open.
+     */
+    protected function tearDown() {
+        gc_collect_cycles();
+    }
+
+    /**
      * Tests the availability field on modules and sections is correctly
      * backed up and restored.
      */
@@ -332,12 +339,141 @@ class core_backup_moodle2_testcase extends advanced_testcase {
     }
 
     /**
+     * When restoring a course, you can change the start date, which shifts other
+     * dates. This test checks that certain dates are correctly modified.
+     */
+    public function test_restore_dates() {
+        global $DB, $CFG;
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $CFG->enableavailability = true;
+
+        // Create a course with specific start date.
+        $generator = $this->getDataGenerator();
+        $course = $generator->create_course(array(
+                'startdate' => strtotime('1 Jan 2014 00:00 GMT')));
+
+        // Add a forum with conditional availability date restriction, including
+        // one of them nested inside a tree.
+        $availability = '{"op":"&","showc":[true,true],"c":[' .
+                '{"op":"&","c":[{"type":"date","d":">=","t":DATE1}]},' .
+                '{"type":"date","d":"<","t":DATE2}]}';
+        $before = str_replace(
+                array('DATE1', 'DATE2'),
+                array(strtotime('1 Feb 2014 00:00 GMT'), strtotime('10 Feb 2014 00:00 GMT')),
+                $availability);
+        $forum = $generator->create_module('forum', array('course' => $course->id,
+                'availability' => $before));
+
+        // Add an assign with defined start date.
+        $assign = $generator->create_module('assign', array('course' => $course->id,
+                'allowsubmissionsfromdate' => strtotime('7 Jan 2014 16:00 GMT')));
+
+        // Do backup and restore.
+        $newcourseid = $this->backup_and_restore($course, strtotime('3 Jan 2015 00:00 GMT'));
+
+        $modinfo = get_fast_modinfo($newcourseid);
+
+        // Check forum dates are modified by the same amount as the course start.
+        $newforums = $modinfo->get_instances_of('forum');
+        $newforum = reset($newforums);
+        $after = str_replace(
+            array('DATE1', 'DATE2'),
+            array(strtotime('3 Feb 2015 00:00 GMT'), strtotime('12 Feb 2015 00:00 GMT')),
+            $availability);
+        $this->assertEquals($after, $newforum->availability);
+
+        // Check assign date.
+        $newassigns = $modinfo->get_instances_of('assign');
+        $newassign = reset($newassigns);
+        $this->assertEquals(strtotime('9 Jan 2015 16:00 GMT'), $DB->get_field(
+                'assign', 'allowsubmissionsfromdate', array('id' => $newassign->instance)));
+    }
+
+    /**
+     * Test front page backup/restore and duplicate activities
+     * @return void
+     */
+    public function test_restore_frontpage() {
+        global $DB, $CFG, $USER;
+
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+        $generator = $this->getDataGenerator();
+
+        $frontpage = $DB->get_record('course', array('id' => SITEID));
+        $forum = $generator->create_module('forum', array('course' => $frontpage->id));
+
+        // Activities can be duplicated.
+        $this->duplicate($frontpage, $forum->cmid);
+
+        $modinfo = get_fast_modinfo($frontpage);
+        $this->assertEquals(2, count($modinfo->get_instances_of('forum')));
+
+        // Front page backup.
+        $frontpagebc = new backup_controller(backup::TYPE_1COURSE, $frontpage->id,
+                backup::FORMAT_MOODLE, backup::INTERACTIVE_NO, backup::MODE_IMPORT,
+                $USER->id);
+        $frontpagebackupid = $frontpagebc->get_backupid();
+        $frontpagebc->execute_plan();
+        $frontpagebc->destroy();
+
+        $course = $generator->create_course();
+        $newcourseid = restore_dbops::create_new_course(
+                $course->fullname . ' 2', $course->shortname . '_2', $course->category);
+
+        // Other course backup.
+        $bc = new backup_controller(backup::TYPE_1COURSE, $course->id,
+                backup::FORMAT_MOODLE, backup::INTERACTIVE_NO, backup::MODE_IMPORT,
+                $USER->id);
+        $otherbackupid = $bc->get_backupid();
+        $bc->execute_plan();
+        $bc->destroy();
+
+        // We can only restore a front page over the front page.
+        $rc = new restore_controller($frontpagebackupid, $course->id,
+                backup::INTERACTIVE_NO, backup::MODE_GENERAL, $USER->id,
+                backup::TARGET_CURRENT_ADDING);
+        $this->assertFalse($rc->execute_precheck());
+        $rc->destroy();
+
+        $rc = new restore_controller($frontpagebackupid, $newcourseid,
+                backup::INTERACTIVE_NO, backup::MODE_GENERAL, $USER->id,
+                backup::TARGET_NEW_COURSE);
+        $this->assertFalse($rc->execute_precheck());
+        $rc->destroy();
+
+        $rc = new restore_controller($frontpagebackupid, $frontpage->id,
+                backup::INTERACTIVE_NO, backup::MODE_GENERAL, $USER->id,
+                backup::TARGET_CURRENT_ADDING);
+        $this->assertTrue($rc->execute_precheck());
+        $rc->execute_plan();
+        $rc->destroy();
+
+        // We can't restore a non-front page course on the front page course.
+        $rc = new restore_controller($otherbackupid, $frontpage->id,
+                backup::INTERACTIVE_NO, backup::MODE_GENERAL, $USER->id,
+                backup::TARGET_CURRENT_ADDING);
+        $this->assertFalse($rc->execute_precheck());
+        $rc->destroy();
+
+        $rc = new restore_controller($otherbackupid, $newcourseid,
+                backup::INTERACTIVE_NO, backup::MODE_GENERAL, $USER->id,
+                backup::TARGET_NEW_COURSE);
+        $this->assertTrue($rc->execute_precheck());
+        $rc->execute_plan();
+        $rc->destroy();
+    }
+
+    /**
      * Backs a course up and restores it.
      *
      * @param stdClass $course Course object to backup
+     * @param int $newdate If non-zero, specifies custom date for new course
      * @return int ID of newly restored course
      */
-    protected function backup_and_restore($course) {
+    protected function backup_and_restore($course, $newdate = 0) {
         global $USER, $CFG;
 
         // Turn off file logging, otherwise it can't delete the file (Windows).
@@ -358,6 +494,9 @@ class core_backup_moodle2_testcase extends advanced_testcase {
         $rc = new restore_controller($backupid, $newcourseid,
                 backup::INTERACTIVE_NO, backup::MODE_GENERAL, $USER->id,
                 backup::TARGET_NEW_COURSE);
+        if ($newdate) {
+            $rc->get_plan()->get_setting('course_startdate')->set_value($newdate);
+        }
         $this->assertTrue($rc->execute_precheck());
         $rc->execute_plan();
         $rc->destroy();

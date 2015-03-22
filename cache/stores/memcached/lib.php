@@ -302,16 +302,19 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
      *      be set to false.
      */
     public function get_many($keys) {
+        $return = array();
         $result = $this->connection->getMulti($keys);
         if (!is_array($result)) {
             $result = array();
         }
         foreach ($keys as $key) {
             if (!array_key_exists($key, $result)) {
-                $result[$key] = false;
+                $return[$key] = false;
+            } else {
+                $return[$key] = $result[$key];
             }
         }
-        return $result;
+        return $return;
     }
 
     /**
@@ -491,24 +494,24 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
         }
 
         $clustered = false;
+        $setservers = array();
         if (isset($data->clustered)) {
             $clustered = true;
-        }
 
-        $lines = explode("\n", $data->setservers);
-        $setservers = array();
-        foreach ($lines as $line) {
-            // Trim surrounding colons and default whitespace.
-            $line = trim(trim($line), ":");
-            if ($line === '') {
-                continue;
+            $lines = explode("\n", $data->setservers);
+            foreach ($lines as $line) {
+                // Trim surrounding colons and default whitespace.
+                $line = trim(trim($line), ":");
+                if ($line === '') {
+                    continue;
+                }
+                $setserver = explode(':', $line, 3);
+                // We don't use weights, so display a debug message.
+                if (count($setserver) > 2) {
+                    debugging('Memcached Set Server '.$setserver[0].' has too many parameters.');
+                }
+                $setservers[] = $setserver;
             }
-            $setserver = explode(':', $line, 3);
-            // We don't use weights, so display a debug message.
-            if (count($setserver) > 2) {
-                debugging('Memcached Set Server '.$setserver[0].' has too many parameters.');
-            }
-            $setservers[] = $setserver;
         }
 
         return array(
@@ -692,5 +695,17 @@ class cachestore_memcached extends cache_store implements cache_is_configurable 
             }
         }
         return $warnings;
+    }
+
+    /**
+     * Returns true if this cache store instance is both suitable for testing, and ready for testing.
+     *
+     * Cache stores that support being used as the default store for unit and acceptance testing should
+     * override this function and return true if there requirements have been met.
+     *
+     * @return bool
+     */
+    public static function ready_to_be_used_for_testing() {
+        return defined('TEST_CACHESTORE_MEMCACHED_TESTSERVERS');
     }
 }

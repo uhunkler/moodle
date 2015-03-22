@@ -230,7 +230,7 @@ class qformat_default {
         echo "<strong>{$message}</strong>\n";
         echo "</div>";
 
-         $this->importerrors++;
+        $this->importerrors++;
     }
 
     /**
@@ -426,7 +426,7 @@ class qformat_default {
 
             if (!empty($CFG->usetags) && isset($question->tags)) {
                 require_once($CFG->dirroot . '/tag/lib.php');
-                tag_set('question', $question->id, $question->tags, 'core_question', $question->context);
+                tag_set('question', $question->id, $question->tags, 'core_question', $question->context->id);
             }
 
             if (!empty($result->error)) {
@@ -696,9 +696,8 @@ class qformat_default {
      * @return object question object
      */
     protected function readquestion($lines) {
-
-        $formatnotimplemented = get_string('formatnotimplemented', 'question');
-        echo "<p>{$formatnotimplemented}</p>";
+        // We should never get there unless the qformat plugin is broken.
+        throw new coding_exception('Question format plugin is missing important code: readquestion.');
 
         return null;
     }
@@ -930,8 +929,7 @@ class qformat_default {
      */
     protected function writequestion($question) {
         // if not overidden, then this is an error.
-        $formatnotimplemented = get_string('formatnotimplemented', 'question');
-        echo "<p>{$formatnotimplemented}</p>";
+        throw new coding_exception('Question format plugin is missing important code: writequestion.');
         return null;
     }
 

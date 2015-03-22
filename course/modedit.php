@@ -28,7 +28,6 @@ require_once("lib.php");
 require_once($CFG->libdir.'/filelib.php');
 require_once($CFG->libdir.'/gradelib.php');
 require_once($CFG->libdir.'/completionlib.php');
-require_once($CFG->libdir.'/conditionlib.php');
 require_once($CFG->libdir.'/plagiarismlib.php');
 require_once($CFG->dirroot . '/course/modlib.php');
 
@@ -73,7 +72,6 @@ if (!empty($add)) {
     $data->modulename       = $module->name;
     $data->groupmode        = $course->groupmode;
     $data->groupingid       = $course->defaultgroupingid;
-    $data->groupmembersonly = 0;
     $data->id               = '';
     $data->instance         = '';
     $data->coursemodule     = '';
@@ -146,7 +144,6 @@ if (!empty($add)) {
     $data->cmidnumber         = $cm->idnumber;          // The cm IDnumber
     $data->groupmode          = groups_get_activity_groupmode($cm); // locked later if forced
     $data->groupingid         = $cm->groupingid;
-    $data->groupmembersonly   = $cm->groupmembersonly;
     $data->course             = $course->id;
     $data->module             = $module->id;
     $data->modulename         = $module->name;

@@ -198,7 +198,7 @@ class tree extends tree_node {
 
         // For unit tests, also allow the mock plugin type (even though it
         // isn't configured in the code as a proper plugin).
-        if (defined('PHPUNIT_TEST')) {
+        if (PHPUNIT_TEST) {
             $enabled['mock'] = true;
         }
 
@@ -348,6 +348,52 @@ class tree extends tree_node {
         } else {
             return $result;
         }
+    }
+
+    public function get_user_list_sql($not, info $info, $onlyactive) {
+        global $DB;
+        // Get logic flags from operator.
+        list($innernot, $andoperator) = $this->get_logic_flags($not);
+
+        // Loop through all valid children, getting SQL for each.
+        $childresults = array();
+        foreach ($this->children as $index => $child) {
+            if (!$child->is_applied_to_user_lists()) {
+                continue;
+            }
+            $childresult = $child->get_user_list_sql($innernot, $info, $onlyactive);
+            if ($childresult[0]) {
+                $childresults[] = $childresult;
+            } else if (!$andoperator) {
+                // When using OR operator, if any part doesn't have restrictions,
+                // then nor does the whole thing.
+                return array('', array());
+            }
+        }
+
+        // If there are no conditions, return null.
+        if (!$childresults) {
+            return array('', array());
+        }
+        // If there is a single condition, return it.
+        if (count($childresults) === 1) {
+            return $childresults[0];
+        }
+
+        // Combine results using INTERSECT or UNION.
+        $outsql = null;
+        $subsql = array();
+        $outparams = array();
+        foreach ($childresults as $childresult) {
+            $subsql[] = $childresult[0];
+            $outparams = array_merge($outparams, $childresult[1]);
+        }
+        if ($andoperator) {
+            $outsql = $DB->sql_intersect($subsql, 'id');
+        } else {
+            $outsql = '(' . join(') UNION (', $subsql) . ')';
+        }
+        return array($outsql, $outparams);
     }
 
     public function is_available_for_all($not = false) {
@@ -560,16 +606,28 @@ class tree extends tree_node {
     public function save() {
         $result = new \stdClass();
         $result->op = $this->op;
-        if ($this->op === self::OP_AND || $this->op === self::OP_NOT_OR) {
-            $result->showc = $this->showchildren;
-        } else {
-            $result->show = $this->show;
+        // Only root tree has the 'show' options.
+        if ($this->root) {
+            if ($this->op === self::OP_AND || $this->op === self::OP_NOT_OR) {
+                $result->showc = $this->showchildren;
+            } else {
+                $result->show = $this->show;
+            }
         }
         $result->c = array();
         foreach ($this->children as $child) {
             $result->c[] = $child->save();
         }
         return $result;
+    }
+
+    /**
+     * Checks whether this tree is empty (contains no children).
+     *
+     * @return boolean True if empty
+     */
+    public function is_empty() {
+        return count($this->children) === 0;
     }
 
     /**
@@ -605,10 +663,18 @@ class tree extends tree_node {
     public function update_after_restore($restoreid, $courseid,
             \base_logger $logger, $name) {
         $changed = false;
-        foreach ($this->children as $child) {
-            $thischanged = $child->update_after_restore($restoreid, $courseid,
-                    $logger, $name);
-            $changed = $changed || $thischanged;
+        foreach ($this->children as $index => $child) {
+            if ($child->include_after_restore($restoreid, $courseid, $logger, $name,
+                    info::get_restore_task($restoreid))) {
+                $thischanged = $child->update_after_restore($restoreid, $courseid,
+                        $logger, $name);
+                $changed = $changed || $thischanged;
+            } else {
+                unset($this->children[$index]);
+                unset($this->showchildren[$index]);
+                $this->showchildren = array_values($this->showchildren);
+                $changed = true;
+            }
         }
         return $changed;
     }
@@ -620,5 +686,100 @@ class tree extends tree_node {
             $changed = $changed || $thischanged;
         }
         return $changed;
+    }
+
+    /**
+     * Returns a JSON object which corresponds to a tree.
+     *
+     * Intended for unit testing, as normally the JSON values are constructed
+     * by JavaScript code.
+     *
+     * This function generates 'nested' (i.e. not root-level) trees.
+     *
+     * @param array $children Array of JSON objects from component children
+     * @param string $op Operator (tree::OP_xx)
+     * @return stdClass JSON object
+     * @throws coding_exception If you get parameters wrong
+     */
+    public static function get_nested_json(array $children, $op = self::OP_AND) {
+
+        // Check $op and work out its type.
+        switch($op) {
+            case self::OP_AND:
+            case self::OP_NOT_OR:
+            case self::OP_OR:
+            case self::OP_NOT_AND:
+                break;
+            default:
+                throw new \coding_exception('Invalid $op');
+        }
+
+        // Do simple tree.
+        $result = new \stdClass();
+        $result->op = $op;
+        $result->c = $children;
+        return $result;
+    }
+
+    /**
+     * Returns a JSON object which corresponds to a tree at root level.
+     *
+     * Intended for unit testing, as normally the JSON values are constructed
+     * by JavaScript code.
+     *
+     * The $show parameter can be a boolean for all OP_xx options. For OP_AND
+     * and OP_NOT_OR where you have individual show options, you can specify
+     * a boolean (same for all) or an array.
+     *
+     * @param array $children Array of JSON objects from component children
+     * @param string $op Operator (tree::OP_xx)
+     * @param bool|array $show Whether 'show' option is turned on (see above)
+     * @return stdClass JSON object ready for encoding
+     * @throws coding_exception If you get parameters wrong
+     */
+    public static function get_root_json(array $children, $op = self::OP_AND, $show = true) {
+
+        // Get the basic object.
+        $result = self::get_nested_json($children, $op);
+
+        // Check $op type.
+        switch($op) {
+            case self::OP_AND:
+            case self::OP_NOT_OR:
+                $multishow = true;
+                break;
+            case self::OP_OR:
+            case self::OP_NOT_AND:
+                $multishow = false;
+                break;
+        }
+
+        // Add show options depending on operator.
+        if ($multishow) {
+            if (is_bool($show)) {
+                $result->showc = array_pad(array(), count($result->c), $show);
+            } else if (is_array($show)) {
+                // The JSON will break if anything isn't an actual bool, so check.
+                foreach ($show as $item) {
+                    if (!is_bool($item)) {
+                        throw new \coding_exception('$show array members must be bool');
+                    }
+                }
+                // Check the size matches.
+                if (count($show) != count($result->c)) {
+                    throw new \coding_exception('$show array size does not match $children');
+                }
+                $result->showc = $show;
+            } else {
+                throw new \coding_exception('$show must be bool or array');
+            }
+        } else {
+            if (!is_bool($show)) {
+                throw new \coding_exception('For this operator, $show must be bool');
+            }
+            $result->show = $show;
+        }
+
+        return $result;
     }
 }

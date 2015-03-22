@@ -33,10 +33,9 @@ M.availability_grouping.form.initInner = function(groupings) {
 
 M.availability_grouping.form.getNode = function(json) {
     // Create HTML structure.
-    var strings = M.str.availability_grouping;
-    var html = '<label>' + strings.title + ' <span class="availability-group">' +
+    var html = '<label>' + M.util.get_string('title', 'availability_grouping') + ' <span class="availability-group">' +
             '<select name="id">' +
-            '<option value="choose">' + M.str.moodle.choosedots + '</option>';
+            '<option value="choose">' + M.util.get_string('choosedots', 'moodle') + '</option>';
     for (var i = 0; i < this.groupings.length; i++) {
         var grouping = this.groupings[i];
         // String has already been escaped using format_string.
@@ -48,7 +47,7 @@ M.availability_grouping.form.getNode = function(json) {
     // Set initial value if specified.
     if (json.id !== undefined &&
             node.one('select[name=id] > option[value=' + json.id + ']')) {
-        node.one('select[name=id]').set('value', json.id);
+        node.one('select[name=id]').set('value', '' + json.id);
     }
 
     // Add event handlers (first time only).

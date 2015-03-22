@@ -97,7 +97,7 @@ class quiz {
      * @param int $userid the the userid.
      * @return quiz the new quiz object
      */
-    public static function create($quizid, $userid) {
+    public static function create($quizid, $userid = null) {
         global $DB;
 
         $quiz = quiz_access_manager::load_quiz_and_settings($quizid);
@@ -105,7 +105,9 @@ class quiz {
         $cm = get_coursemodule_from_instance('quiz', $quiz->id, $course->id, false, MUST_EXIST);
 
         // Update quiz with override information.
-        $quiz = quiz_update_effective_access($quiz, $userid);
+        if ($userid) {
+            $quiz = quiz_update_effective_access($quiz, $userid);
+        }
 
         return new quiz($quiz, $cm, $course);
     }
@@ -151,6 +153,14 @@ class quiz {
             }
         }
         get_question_options($questionstoprocess);
+    }
+
+    /**
+     * Get an instance of the {@link \mod_quiz\structure} class for this quiz.
+     * @return \mod_quiz\structure describes the questions in the quiz.
+     */
+    public function get_structure() {
+        return \mod_quiz\structure::create_for_quiz($this);
     }
 
     // Simple getters ==========================================================
@@ -436,12 +446,17 @@ class quiz_attempt {
     /** @var int maximum number of slots in the quiz for the review page to default to show all. */
     const MAX_SLOTS_FOR_DEFAULT_REVIEW_SHOW_ALL = 50;
 
-    // Basic data.
+    /** @var quiz object containing the quiz settings. */
     protected $quizobj;
+
+    /** @var stdClass the quiz_attempts row. */
     protected $attempt;
 
     /** @var question_usage_by_activity the question usage for this quiz attempt. */
     protected $quba;
+
+    /** @var array of quiz_slots rows. */
+    protected $slots;
 
     /** @var array page no => array of slot numbers on the page in order. */
     protected $pagelayout;
@@ -467,6 +482,8 @@ class quiz_attempt {
      *      of the state of each question. Else just set up the basic details of the attempt.
      */
     public function __construct($attempt, $quiz, $cm, $course, $loadquestions = true) {
+        global $DB;
+
         $this->attempt = $attempt;
         $this->quizobj = new quiz($quiz, $cm, $course);
 
@@ -475,6 +492,10 @@ class quiz_attempt {
         }
 
         $this->quba = question_engine::load_questions_usage_by_activity($this->attempt->uniqueid);
+        $this->slots = $DB->get_records('quiz_slots',
+                array('quizid' => $this->get_quizid()), 'slot',
+                'slot, page, requireprevious, questionid, maxmark');
+
         $this->determine_layout();
         $this->number_questions();
     }
@@ -749,6 +770,24 @@ class quiz_attempt {
     }
 
     /**
+     * Has the student, in this attempt, engaged with the quiz in a non-trivial way?
+     * That is, is there any question worth a non-zero number of marks, where
+     * the student has made some response that we have saved?
+     * @return bool true if we have saved a response for at least one graded question.
+     */
+    public function has_response_to_at_least_one_graded_question() {
+        foreach ($this->quba->get_attempt_iterator() as $qa) {
+            if ($qa->get_max_mark() == 0) {
+                continue;
+            }
+            if ($qa->get_num_steps() > 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Get extra summary information about this attempt.
      *
      * Some behaviours may be able to provide interesting summary information
@@ -762,6 +801,7 @@ class quiz_attempt {
      * The values are arrays with two items, title and content. Each of these
      * will be either a string, or a renderable.
      *
+     * @param question_display_options $options the display options for this quiz attempt at this time.
      * @return array as described above.
      */
     public function get_additional_summary_data(question_display_options $options) {
@@ -958,6 +998,21 @@ class quiz_attempt {
     }
 
     /**
+     * Checks whether the question in this slot requires the previous question to have been completed.
+     *
+     * @param int $slot the number used to identify this question within this attempt.
+     * @return bool whether the previous question must have been completed before this one can be seen.
+     */
+    public function is_blocked_by_previous_question($slot) {
+        return $slot > 1 && $this->slots[$slot]->requireprevious &&
+                !$this->get_quiz()->shufflequestions &&
+                $this->get_navigation_method() != QUIZ_NAVMETHOD_SEQ &&
+                !$this->quba->get_question_state($slot - 1)->is_finished() &&
+                $this->quba->can_question_finish_during_attempt($slot - 1);
+    }
+
+    /**
+     * Get the displayed question number for a slot.
      * @param int $slot the number used to identify this question within this attempt.
      * @return string the displayed question number for the question in this slot.
      *      For example '1', '2', '3' or 'i'.
@@ -1226,9 +1281,61 @@ class quiz_attempt {
      * @return string HTML for the question in its current state.
      */
     public function render_question($slot, $reviewing, $thispageurl = null) {
+        if ($this->is_blocked_by_previous_question($slot)) {
+            $placeholderqa = $this->make_blocked_question_placeholder($slot);
+
+            $displayoptions = $this->get_display_options($reviewing);
+            $displayoptions->manualcomment = question_display_options::HIDDEN;
+            $displayoptions->history = question_display_options::HIDDEN;
+            $displayoptions->readonly = true;
+
+            return html_writer::div($placeholderqa->render($displayoptions,
+                    $this->get_question_number($slot)),
+                    'mod_quiz-blocked_question_warning');
+        }
+
         return $this->quba->render_question($slot,
                 $this->get_display_options_with_edit_link($reviewing, $slot, $thispageurl),
                 $this->get_question_number($slot));
+    }
+
+    /**
+     * Create a fake question to be displayed in place of a question that is blocked
+     * until the previous question has been answered.
+     *
+     * @param unknown $slot int slot number of the question to replace.
+     * @return question_definition the placeholde question.
+     */
+    protected function make_blocked_question_placeholder($slot) {
+        $replacedquestion = $this->get_question_attempt($slot)->get_question();
+
+        question_bank::load_question_definition_classes('description');
+        $question = new qtype_description_question();
+        $question->id = $replacedquestion->id;
+        $question->category = null;
+        $question->parent = 0;
+        $question->qtype = question_bank::get_qtype('description');
+        $question->name = '';
+        $question->questiontext = get_string('questiondependsonprevious', 'quiz');
+        $question->questiontextformat = FORMAT_HTML;
+        $question->generalfeedback = '';
+        $question->defaultmark = $this->quba->get_question_max_mark($slot);
+        $question->length = $replacedquestion->length;
+        $question->penalty = 0;
+        $question->stamp = '';
+        $question->version = 0;
+        $question->hidden = 0;
+        $question->timecreated = null;
+        $question->timemodified = null;
+        $question->createdby = null;
+        $question->modifiedby = null;
+
+        $placeholderqa = new question_attempt($question, $this->quba->get_id(),
+                null, $this->quba->get_question_max_mark($slot));
+        $placeholderqa->set_slot($slot);
+        $placeholderqa->start($this->get_quiz()->preferredbehaviour, 1);
+        $placeholderqa->set_flagged($this->is_question_flagged($slot));
+        return $placeholderqa;
     }
 
     /**
@@ -1513,6 +1620,8 @@ class quiz_attempt {
         $this->fire_state_transition_event('\mod_quiz\event\attempt_becameoverdue', $timestamp);
 
         $transaction->allow_commit();
+
+        quiz_send_overdue_message($this);
     }
 
     /**
@@ -1652,12 +1761,21 @@ class quiz_attempt {
  * @since      Moodle 2.1
  */
 class quiz_nav_question_button implements renderable {
+    /** @var string id="..." to add to the HTML for this button. */
     public $id;
+    /** @var string number to display in this button. Either the question number of 'i'. */
     public $number;
+    /** @var string class to add to the class="" attribute to represnt the question state. */
     public $stateclass;
+    /** @var string Textual description of the question state, e.g. to use as a tool tip. */
     public $statestring;
+    /** @var int the page number this question is on. */
+    public $page;
+    /** @var bool true if this question is on the current page. */
     public $currentpage;
+    /** @var bool true if this question has been flagged. */
     public $flagged;
+    /** @var moodle_url the link this button goes to, or null if there should not be a link. */
     public $url;
 }
 
@@ -1703,7 +1821,8 @@ abstract class quiz_nav_panel_base {
                 $button->stateclass = 'complete';
             }
             $button->statestring = $this->get_state_string($qa, $showcorrectness);
-            $button->currentpage = $this->showall || $this->attemptobj->get_question_page($slot) == $this->page;
+            $button->page        = $this->attemptobj->get_question_page($slot);
+            $button->currentpage = $this->showall || $button->page == $this->page;
             $button->flagged     = $qa->is_flagged();
             $button->url         = $this->get_question_url($slot);
             $buttons[] = $button;

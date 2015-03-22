@@ -304,7 +304,6 @@ class core_accesslib_testcase extends advanced_testcase {
         $this->assertEquals($course->id, $result[1]->id);
         $this->assertSame($course->shortname, $result[1]->shortname);
         $this->assertEquals($cm->id, $result[2]->id);
-        $this->assertEquals($cm->groupmembersonly, $result[2]->groupmembersonly);
 
         $result = get_context_info_array($block2context->id);
         $this->assertCount(3, $result);
@@ -312,7 +311,6 @@ class core_accesslib_testcase extends advanced_testcase {
         $this->assertEquals($course->id, $result[1]->id);
         $this->assertSame($course->shortname, $result[1]->shortname);
         $this->assertEquals($cm->id, $result[2]->id);
-        $this->assertEquals($cm->groupmembersonly, $result[2]->groupmembersonly);
     }
 
     /**
@@ -1383,6 +1381,7 @@ class core_accesslib_testcase extends advanced_testcase {
         $systemcontext = context_system::instance();
         $studentrole = $DB->get_record('role', array('shortname'=>'student'), '*', MUST_EXIST);
         $teacherrole = $DB->get_record('role', array('shortname'=>'editingteacher'), '*', MUST_EXIST);
+        $noeditteacherrole = $DB->get_record('role', array('shortname' => 'teacher'), '*', MUST_EXIST);
         $course = $this->getDataGenerator()->create_course();
         $coursecontext = context_course::instance($course->id);
         $otherid = create_role('Other role', 'other', 'Some other role', '');
@@ -1399,6 +1398,7 @@ class core_accesslib_testcase extends advanced_testcase {
         $this->getDataGenerator()->enrol_user($user3->id, $course->id, $teacherrole->id);
         $user4 = $this->getDataGenerator()->create_user();
         $this->getDataGenerator()->enrol_user($user4->id, $course->id, $studentrole->id);
+        $this->getDataGenerator()->enrol_user($user4->id, $course->id, $noeditteacherrole->id);
 
         $group = $this->getDataGenerator()->create_group(array('courseid'=>$course->id));
         groups_add_member($group, $user3);
@@ -1436,6 +1436,19 @@ class core_accesslib_testcase extends advanced_testcase {
         $users = get_role_users($teacherrole->id, $coursecontext, true, 'u.id, u.email, u.idnumber, u.firstname', 'u.idnumber', null, '', '', '', 'u.firstname = :xfirstname', array('xfirstname'=>'John'));
         $this->assertCount(1, $users);
         $this->assertArrayHasKey($user1->id, $users);
+
+        $users = get_role_users(array($noeditteacherrole->id, $studentrole->id), $coursecontext, false, 'ra.id', 'ra.id');
+        $this->assertDebuggingNotCalled();
+        $users = get_role_users(array($noeditteacherrole->id, $studentrole->id), $coursecontext, false, 'ra.userid', 'ra.userid');
+        $this->assertDebuggingCalled('get_role_users() without specifying one single roleid needs to be called prefixing ' .
+            'role assignments id (ra.id) as unique field, you can use $fields param for it.');
+        $users = get_role_users(array($noeditteacherrole->id, $studentrole->id), $coursecontext, false);
+        $this->assertDebuggingCalled('get_role_users() without specifying one single roleid needs to be called prefixing ' .
+            'role assignments id (ra.id) as unique field, you can use $fields param for it.');
+        $users = get_role_users(array($noeditteacherrole->id, $studentrole->id), $coursecontext,
+            false, 'u.id, u.firstname', 'u.id, u.firstname');
+        $this->assertDebuggingCalled('get_role_users() without specifying one single roleid needs to be called prefixing ' .
+            'role assignments id (ra.id) as unique field, you can use $fields param for it.');
     }
 
     /**
@@ -2566,7 +2579,6 @@ class core_accesslib_testcase extends advanced_testcase {
 
         foreach ($DB->get_records('context') as $contextid => $record) {
             $context = context::instance_by_id($contextid);
-            $this->assertEquals($context, get_context_instance_by_id($contextid, IGNORE_MISSING));
             $this->assertEquals($context, get_context_instance($record->contextlevel, $record->instanceid));
             $this->assertEquals($context->get_parent_context_ids(), get_parent_contexts($context));
             if ($context->id == SYSCONTEXTID) {
@@ -2586,8 +2598,6 @@ class core_accesslib_testcase extends advanced_testcase {
         // Make sure a debugging is thrown.
         get_context_instance($record->contextlevel, $record->instanceid);
         $this->assertDebuggingCalled('get_context_instance() is deprecated, please use context_xxxx::instance() instead.', DEBUG_DEVELOPER);
-        get_context_instance_by_id($record->id);
-        $this->assertDebuggingCalled('get_context_instance_by_id() is deprecated, please use context::instance_by_id($id) instead.', DEBUG_DEVELOPER);
         get_system_context();
         $this->assertDebuggingCalled('get_system_context() is deprecated, please use context_system::instance() instead.', DEBUG_DEVELOPER);
         get_parent_contexts($context);

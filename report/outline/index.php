@@ -110,7 +110,6 @@ if ($uselegacyreader) {
     $limittime = '';
     if (!empty($minloginternalreader)) {
         $limittime = ' AND time < :timeto ';
-        $params['timeto'] = $minloginternalreader;
     }
     // Check if we need to show the last access.
     $sqllasttime = '';
@@ -129,10 +128,13 @@ if ($uselegacyreader) {
                AND m.visible = :visible $limittime
           GROUP BY cm.id";
     $params = array('courseid' => $course->id, 'action' => 'view%', 'visible' => 1);
+    if (!empty($minloginternalreader)) {
+        $params['timeto'] = $minloginternalreader;
+    }
     $views = $DB->get_records_sql($sql, $params);
 }
 
-// Get record from sql_internal_reader and merge with records obtained from legacy log (if needed).
+// Get record from sql_internal_table_reader and merge with records obtained from legacy log (if needed).
 if ($useinternalreader) {
     // Check if we need to show the last access.
     $sqllasttime = '';
@@ -156,6 +158,9 @@ if ($useinternalreader) {
         foreach ($v as $key => $value) {
             if (isset($views[$key]) && !empty($views[$key]->numviews)) {
                 $views[$key]->numviews += $value->numviews;
+                if ($value->lasttime > $views[$key]->lasttime) {
+                    $views[$key]->lasttime = $value->lasttime;
+                }
             } else {
                 $views[$key] = $value;
             }

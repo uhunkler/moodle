@@ -88,7 +88,6 @@ core_component::get_core_subsystems();
 require_once($CFG->libdir.'/adminlib.php');    // various admin-only functions
 require_once($CFG->libdir.'/upgradelib.php');  // general upgrade/install related functions
 
-$id             = optional_param('id', '', PARAM_TEXT);
 $confirmupgrade = optional_param('confirmupgrade', 0, PARAM_BOOL);
 $confirmrelease = optional_param('confirmrelease', 0, PARAM_BOOL);
 $confirmplugins = optional_param('confirmplugincheck', 0, PARAM_BOOL);
@@ -525,11 +524,6 @@ if (empty($site->shortname)) {
     redirect('upgradesettings.php?return=site');
 }
 
-// Check if we are returning from moodle.org registration and if so, we mark that fact to remove reminders
-if (!empty($id) and $id == $CFG->siteidentifier) {
-    set_config('registered', time());
-}
-
 // setup critical warnings before printing admin tree block
 $insecuredataroot = is_dataroot_insecure(true);
 $SESSION->admin_critical_warning = ($insecuredataroot==INSECURE_DATAROOT_ERROR);
@@ -555,7 +549,8 @@ if (isset($SESSION->pluginuninstallreturn)) {
 // Print default admin page with notifications.
 $errorsdisplayed = defined('WARN_DISPLAY_ERRORS_ENABLED');
 
-$lastcron = $DB->get_field_sql('SELECT MAX(lastcron) FROM {modules}');
+// We make the assumption that at least one schedule task should run once per day.
+$lastcron = $DB->get_field_sql('SELECT MAX(lastruntime) FROM {task_scheduled}');
 $cronoverdue = ($lastcron < time() - 3600 * 24);
 $dbproblems = $DB->diagnose();
 $maintenancemode = !empty($CFG->maintenance_enabled);

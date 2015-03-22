@@ -226,7 +226,7 @@ class core_notes_external extends external_api {
         global $CFG;
         require_once($CFG->dirroot . "/notes/lib.php");
 
-        $params = self::validate_parameters(self::delete_notes_parameters(), $notes);
+        $params = self::validate_parameters(self::delete_notes_parameters(), array('notes' => $notes));
 
         // Check if note system is enabled.
         if (!$CFG->enablenotes) {
@@ -295,7 +295,7 @@ class core_notes_external extends external_api {
         global $CFG;
         require_once($CFG->dirroot . "/notes/lib.php");
 
-        $params = self::validate_parameters(self::get_notes_parameters(), $notes);
+        $params = self::validate_parameters(self::get_notes_parameters(), array('notes' => $notes));
         // Check if note system is enabled.
         if (!$CFG->enablenotes) {
             throw new moodle_exception('notesdisabled', 'notes');
@@ -514,6 +514,15 @@ class moodle_notes_external extends external_api {
      */
     public static function create_notes_returns() {
         return core_notes_external::create_notes_returns();
+    }
+
+    /**
+     * Marking the method as deprecated.
+     *
+     * @return bool
+     */
+    public static function create_notes_is_deprecated() {
+        return true;
     }
 
 }

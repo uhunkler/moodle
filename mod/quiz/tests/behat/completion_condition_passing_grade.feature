@@ -32,7 +32,7 @@ Feature: Set a quiz to be marked complete when the student passes
     And I click on "Edit settings" "link" in the "Administration" "block"
     And I set the following fields to these values:
       | Enable completion tracking | Yes |
-    And I press "Save changes"
+    And I press "Save and display"
     And I add a "Quiz" to section "1" and I fill the form with:
       | Name        | Test quiz name        |
       | Description | Test quiz description |
@@ -48,13 +48,13 @@ Feature: Set a quiz to be marked complete when the student passes
       | Feedback for the response 'False'. | So you think it is false                |
     And I follow "Course 1"
     And I follow "Grades"
-    And I set the field "jump" to "Simple view"
+    And I set the field "jump" to "Categories and items"
     And I press "Go"
     And I follow "Edit  quiz Test quiz name"
     Then I should see "Edit grade item"
     And I set the field "gradepass" to "5"
     And I press "Save changes"
-    Then I should see "Simple view"
+    Then I should see "Categories and items"
     And I log out
 
     And I log in as "student1"

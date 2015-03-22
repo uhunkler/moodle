@@ -1,5 +1,4 @@
 <?php
-
 // This file is part of Moodle - http://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -18,7 +17,7 @@
 /**
  * Strings for component 'message', language 'en', branch 'MOODLE_20_STABLE'
  *
- * @package   message
+ * @package   core_message
  * @copyright 1999 onwards Martin Dougiamas  {@link http://moodle.com}
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -53,6 +52,7 @@ $string['emailtagline'] = 'This is a copy of a message sent to you at "{$a->site
 $string['emptysearchstring'] = 'You must search for something';
 $string['enabled'] = 'Enabled';
 $string['errorcallingprocessor'] = 'Error calling defined output';
+$string['errorwhilesendingmessage'] = 'An error occured while sending the message, please try again later.';
 $string['errortranslatingdefault'] = 'Error translating default setting provided by plugin, using system defaults instead.';
 $string['eventmessagecontactadded'] = 'Message contact added';
 $string['eventmessagecontactblocked'] = 'Message contact blocked';
@@ -86,7 +86,9 @@ $string['message'] = 'Message';
 $string['messagehistory'] = 'Message history';
 $string['messagehistoryfull'] = 'All messages';
 $string['messagenavigation'] = 'Message navigation:';
+$string['messagetosend'] = 'Message to send';
 $string['messages'] = 'Messages';
+$string['messagesent'] = 'Message sent';
 $string['messaging'] = 'Messaging';
 $string['messagingblockednoncontact'] = '{$a} will not be able to reply as you have blocked non-contacts';
 $string['messagingdisabled'] = 'Messaging is disabled on this site, emails will be sent instead';
@@ -126,6 +128,7 @@ $string['searchmessages'] = 'Search messages';
 $string['searchcombined'] = 'Search people and messages';
 $string['sendingvia'] = 'Sending "{$a->provider}" via "{$a->processor}"';
 $string['sendingviawhen'] = 'Sending "{$a->provider}" via "{$a->processor}" when {$a->state}';
+$string['sendingmessage'] = 'Sending message';
 $string['sendmessage'] = 'Send message';
 $string['sendmessageto'] = 'Send message to {$a}';
 $string['sendmessagetopopup'] = 'Send message to {$a} - new window';
@@ -144,3 +147,4 @@ $string['unreadnewmessage'] = 'New message from {$a}';
 $string['userisblockingyou'] = 'This user has blocked you from sending messages to them';
 $string['userisblockingyounoncontact'] = '{$a} only accepts messages from their contacts.';
 $string['userssearchresults'] = 'Users found: {$a}';
+$string['viewconversation'] = 'View conversation';
