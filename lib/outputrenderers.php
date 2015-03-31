@@ -168,6 +168,7 @@ class renderer_base {
             $stringhelper = new \core\output\mustache_string_helper();
             $jshelper = new \core\output\mustache_javascript_helper($this->page->requires);
             $pixhelper = new \core\output\mustache_pix_helper($this);
+            $dynamicpartial = new \core\output\mustache_dynamicpartial_helper();
 
             // We only expose the variables that are exposed to JS templates.
             $safeconfig = $this->page->requires->get_config_for_javascript($this->page, $this);
@@ -175,7 +176,8 @@ class renderer_base {
             $helpers = array('config' => $safeconfig,
                              'str' => array($stringhelper, 'str'),
                              'js' => array($jshelper, 'help'),
-                             'pix' => array($pixhelper, 'pix'));
+                             'pix' => array($pixhelper, 'pix'),
+                             'dyn' => array($dynamicpartial, 'dyn'));
 
             $this->mustache = new Mustache_Engine(array(
                 'cache' => $cachedir,
