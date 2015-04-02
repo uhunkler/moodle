@@ -22,10 +22,9 @@ use renderer_base;
 use stdClass;
 
 /**
- * Class containing data for local_mustache_tests index page
+ * Class containing data for mustache layouts
  *
- * @package         local
- * @subpackage      mustache_tests
+ * @package         theme_cleanm
  * @copyright       2015 eFaktor
  * @author          Urs Hunkler {@link urs.hunkler@unodo.de}
  * @license         http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -48,11 +47,12 @@ class columns2_layout extends base_layout implements renderable, templatable {
 
         $data = parent::export_for_template($output);
 
-        $data->pagelayout = 'theme_cleanm/partials/columns2';
-
         $data->body_attributes = $output->body_attributes('two-column');
         $data->regionmain = $regionmain;
         $data->blocks_side_pre = $output->blocks('side-pre', $sidepre);
+
+        $data->pagelayout =
+            $output->render_from_template('theme_cleanm/partials/columns2', $data);
 
         return $data;
     }

@@ -21,10 +21,9 @@ defined('MOODLE_INTERNAL') || die;
 use theme_bootstrapbase_core_renderer;
 
 /**
- * Renderer class for local_mustache_tests
+ * Class containing data for mustache layouts
  *
- * @package         local
- * @subpackage      mustache_tests
+ * @package         theme_cleanm
  * @copyright       2015 eFaktor
  * @author          Urs Hunkler {@link urs.hunkler@unodo.de}
  * @license         http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later

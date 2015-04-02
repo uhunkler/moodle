@@ -22,10 +22,9 @@ use renderer_base;
 use stdClass;
 
 /**
- * Class containing data for local_mustache_tests index page
+ * Class containing data for mustache layouts
  *
- * @package         local
- * @subpackage      mustache_tests
+ * @package         theme_cleanm
  * @copyright       2015 eFaktor
  * @author          Urs Hunkler {@link urs.hunkler@unodo.de}
  * @license         http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
