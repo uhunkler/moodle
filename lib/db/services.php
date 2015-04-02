@@ -99,6 +99,27 @@ $functions = array(
         'type'        => 'read',
         'capabilities'=> 'moodle/cohort:view',
     ),
+
+    // Comments related functions.
+
+    'core_comment_get_comments' => array(
+        'classname'     => 'core_comment_external',
+        'methodname'    => 'get_comments',
+        'description'   => 'Returns comments.',
+        'type'          => 'read',
+        'capabilities'  => 'moodle/comment:view',
+    ),
+
+    // Completion related functions.
+
+    'core_completion_get_activities_completion_status' => array(
+        'classname'     => 'core_completion_external',
+        'methodname'    => 'get_activities_completion_status',
+        'description'   => 'Return the activities completion status for a user in a course.',
+        'type'          => 'read',
+        'capabilities'  => '',
+    ),
+
     // Grade related functions.
 
     'core_grades_get_grades' => array(
@@ -310,6 +331,15 @@ $functions = array(
         'description'   => 'Returns all groups in specified course for the specified user.',
         'type'          => 'read',
         'capabilities'  => 'moodle/course:managegroups',
+    ),
+
+    'core_notes_get_course_notes' => array(
+        'classname'     => 'core_notes_external',
+        'methodname'    => 'get_course_notes',
+        'classpath'     => 'notes/externallib.php',
+        'description'   => 'Returns all notes in specified course (or site) for the specified user.',
+        'type'          => 'read',
+        'capabilities'  => 'moodle/notes:view',
     ),
 
     // === file related functions ===
@@ -659,6 +689,15 @@ $functions = array(
         'type'        => 'write',
         'capabilities'=> 'moodle/course:update,moodle/course:changecategory,moodle/course:changefullname,moodle/course:changeshortname,moodle/course:changeidnumber,moodle/course:changesummary,moodle/course:visibility',
     ),
+
+    'core_course_view_course' => array(
+        'classname'   => 'core_course_external',
+        'methodname'  => 'view_course',
+        'classpath'   => 'course/externallib.php',
+        'description' => 'Log that the course was viewed',
+        'type'        => 'write'
+    ),
+
 
     // === course category related functions ===
 
@@ -1023,7 +1062,12 @@ $services = array(
             'core_user_remove_user_device',
             'core_course_get_courses',
             'core_completion_update_activity_completion_status_manually',
-            'mod_data_get_databases_by_courses'
+            'mod_data_get_databases_by_courses',
+            'core_comment_get_comments',
+            'mod_forum_view_forum',
+            'core_course_view_course',
+            'core_completion_get_activities_completion_status',
+            'core_notes_get_course_notes',
             ),
         'enabled' => 0,
         'restrictedusers' => 0,
