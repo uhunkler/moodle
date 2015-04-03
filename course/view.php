@@ -96,6 +96,9 @@
     // Must set layout before gettting section info. See MDL-47555.
     $PAGE->set_pagelayout('course');
 
+    // Define the renderable for the page
+    $pagerenderable = new \core_course\output\course_view_page();
+
     if ($section and $section > 0) {
 
         // Get section details and check it exists.
@@ -198,7 +201,9 @@
                     redirect(course_get_url($course));
                 }
             } else {
-                echo $OUTPUT->notification('An error occurred while moving a section');
+//                echo $OUTPUT->notification('An error occurred while moving a section');
+                $pagerenderable->add_data('notification',
+                    $OUTPUT->notification('An error occurred while moving a section'));
             }
         }
     } else {
@@ -241,23 +246,26 @@
     }
 
     $PAGE->set_heading($course->fullname);
-    echo $OUTPUT->header();
+//    echo $OUTPUT->header();
+    $pagerenderable->add_data('courseheader', $OUTPUT->header());
 
-    if ($completion->is_enabled()) {
-        // This value tracks whether there has been a dynamic change to the page.
-        // It is used so that if a user does this - (a) set some tickmarks, (b)
-        // go to another page, (c) clicks Back button - the page will
-        // automatically reload. Otherwise it would start with the wrong tick
-        // values.
-        echo html_writer::start_tag('form', array('action'=>'.', 'method'=>'get'));
-        echo html_writer::start_tag('div');
-        echo html_writer::empty_tag('input', array('type'=>'hidden', 'id'=>'completion_dynamic_change', 'name'=>'completion_dynamic_change', 'value'=>'0'));
-        echo html_writer::end_tag('div');
-        echo html_writer::end_tag('form');
-    }
+    $pagerenderable->add_data('completion_enabled', $completion->is_enabled());
+
+//    if ($completion->is_enabled()) {
+//        // This value tracks whether there has been a dynamic change to the page.
+//        // It is used so that if a user does this - (a) set some tickmarks, (b)
+//        // go to another page, (c) clicks Back button - the page will
+//        // automatically reload. Otherwise it would start with the wrong tick
+//        // values.
+//        echo html_writer::start_tag('form', array('action'=>'.', 'method'=>'get'));
+//        echo html_writer::start_tag('div');
+//        echo html_writer::empty_tag('input', array('type'=>'hidden', 'id'=>'completion_dynamic_change', 'name'=>'completion_dynamic_change', 'value'=>'0'));
+//        echo html_writer::end_tag('div');
+//        echo html_writer::end_tag('form');
+//    }
 
     // Course wrapper start.
-    echo html_writer::start_tag('div', array('class'=>'course-content'));
+//    echo html_writer::start_tag('div', array('class'=>'course-content'));
 
     // make sure that section 0 exists (this function will create one if it is missing)
     course_create_sections_if_missing($course, 0);
@@ -277,10 +285,13 @@
     $displaysection = $section;
 
     // Include the actual course format.
+    ob_start();
     require($CFG->dirroot .'/course/format/'. $course->format .'/format.php');
+    $pagerenderable->add_data('courseformat', ob_get_contents());
+    ob_end_clean();
     // Content wrapper end.
 
-    echo html_writer::end_tag('div');
+//    echo html_writer::end_tag('div');
 
     // Trigger course viewed event.
     // We don't trust $context here. Course format inclusion above executes in the global space. We can't assume
@@ -290,4 +301,9 @@
     // Include course AJAX
     include_course_ajax($course, $modnamesused);
 
-    echo $OUTPUT->footer();
+//    echo $OUTPUT->footer();
+    $pagerenderable->add_data('coursefooter', $OUTPUT->footer());
+
+    // Get the renderer for this page
+    $output = $PAGE->get_renderer('course');
+    echo $output->render($pagerenderable);

@@ -1,0 +1,18 @@
+<span>course view template</span>
+{{#notification}} . {{/notification}}
+{{{courseheader}}}
+
+{{#completion_enabled}}
+    <form action="." method="get">
+        <div>
+            <input type="hidden" id="completion_dynamic_change"
+                   name="completion_dynamic_change" value="0"/>
+        </div>
+    </form>
+{{/completion_enabled}}
+
+<div class="course-content">
+    {{{courseformat}}}
+</div>
+
+{{{coursefooter}}}
