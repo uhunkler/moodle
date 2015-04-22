@@ -7,8 +7,8 @@ Feature: Users can auto-enrol themself in courses where self enrolment is allowe
   Background:
     Given the following "users" exist:
       | username | firstname | lastname | email |
-      | teacher1 | Teacher | 1 | teacher1@asd.com |
-      | student1 | Student | 1 | student1@asd.com |
+      | teacher1 | Teacher | 1 | teacher1@example.com |
+      | student1 | Student | 1 | student1@example.com |
     And the following "courses" exist:
       | fullname | shortname | format |
       | Course 1 | C1 | topics |
@@ -24,6 +24,7 @@ Feature: Users can auto-enrol themself in courses where self enrolment is allowe
       | Custom instance name | Test student enrolment |
     And I log out
     And I log in as "student1"
+    And I am on site homepage
     And I follow "Course 1"
     And I press "Enrol me"
     Then I should see "Topic 1"
@@ -38,6 +39,7 @@ Feature: Users can auto-enrol themself in courses where self enrolment is allowe
       | Enrolment key | moodle_rules |
     And I log out
     And I log in as "student1"
+    And I am on site homepage
     And I follow "Course 1"
     And I set the following fields to these values:
       | Enrolment key | moodle_rules |
@@ -49,6 +51,7 @@ Feature: Users can auto-enrol themself in courses where self enrolment is allowe
   @javascript
   Scenario: Self-enrolment disabled
     Given I log in as "student1"
+    And I am on site homepage
     When I follow "Course 1"
     Then I should see "You can not enrol yourself in this course"
 
@@ -68,6 +71,7 @@ Feature: Users can auto-enrol themself in courses where self enrolment is allowe
     And I press "Save changes"
     And I log out
     And I log in as "student1"
+    And I am on site homepage
     And I follow "Course 1"
     And I set the following fields to these values:
       | Enrolment key | Test-groupenrolkey1 |

@@ -23,6 +23,7 @@
  */
 
 require_once('../config.php');
+require_once($CFG->dirroot.'/user/lib.php');
 require_once($CFG->libdir.'/tablelib.php');
 require_once($CFG->libdir.'/filelib.php');
 
@@ -105,16 +106,8 @@ if (empty($rolenames) && !$isfrontpage) {
     }
 }
 
-$event = \core\event\user_list_viewed::create(array(
-    'objectid' => $course->id,
-    'courseid' => $course->id,
-    'context' => $context,
-    'other' => array(
-        'courseshortname' => $course->shortname,
-        'coursefullname' => $course->fullname
-    )
-));
-$event->trigger();
+// Trigger events.
+user_list_view($course, $context);
 
 $bulkoperations = has_capability('moodle/course:bulkmessaging', $context);
 
@@ -162,6 +155,7 @@ $PAGE->add_body_class('path-user');                     // So we can style it in
 $PAGE->set_other_editing_capability('moodle/course:manageactivities');
 
 echo $OUTPUT->header();
+echo $OUTPUT->heading(get_string('participants'));
 
 echo '<div class="userlist">';
 

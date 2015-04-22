@@ -4270,5 +4270,82 @@ function xmldb_main_upgrade($oldversion) {
         upgrade_main_savepoint(true, 2015032000.00);
     }
 
+    if ($oldversion < 2015040200.01) {
+        // Force uninstall of deleted tool.
+        if (!file_exists("$CFG->dirroot/$CFG->admin/tool/timezoneimport")) {
+            // Remove capabilities.
+            capabilities_cleanup('tool_timezoneimport');
+            // Remove all other associated config.
+            unset_all_config_for_plugin('tool_timezoneimport');
+        }
+        upgrade_main_savepoint(true, 2015040200.01);
+    }
+
+    if ($oldversion < 2015040200.02) {
+        // Define table timezone to be dropped.
+        $table = new xmldb_table('timezone');
+        // Conditionally launch drop table for timezone.
+        if ($dbman->table_exists($table)) {
+            $dbman->drop_table($table);
+        }
+        upgrade_main_savepoint(true, 2015040200.02);
+    }
+
+    if ($oldversion < 2015040200.03) {
+        if (isset($CFG->timezone) and $CFG->timezone == 99) {
+            // Migrate to real server timezone.
+            unset_config('timezone');
+        }
+        upgrade_main_savepoint(true, 2015040200.03);
+    }
+
+    if ($oldversion < 2015040700.01) {
+        $DB->delete_records('config_plugins', array('name' => 'requiremodintro'));
+        upgrade_main_savepoint(true, 2015040700.01);
+    }
+
+    if ($oldversion < 2015040900.01) {
+        // Add "My grades" to the user menu.
+        $oldconfig = get_config('core', 'customusermenuitems');
+        if (strpos("mygrades,grades|/grade/report/mygrades.php|grades", $oldconfig) === false) {
+            $newconfig = "mygrades,grades|/grade/report/mygrades.php|grades\n" . $CFG->customusermenuitems;
+            set_config('customusermenuitems', $newconfig);
+        }
+
+        upgrade_main_savepoint(true, 2015040900.01);
+    }
+
+    if ($oldversion < 2015040900.02) {
+        // Update the default user menu (add preferences, remove my files and my badges).
+        $oldconfig = get_config('core', 'customusermenuitems');
+
+        // Add "My preferences" at the end.
+        if (strpos($oldconfig, "mypreferences,moodle|/user/preference.php|preferences") === false) {
+            $newconfig = $oldconfig . "\nmypreferences,moodle|/user/preferences.php|preferences";
+        } else {
+            $newconfig = $oldconfig;
+        }
+        // Remove my files.
+        $newconfig = str_replace("myfiles,moodle|/user/files.php|download", "", $newconfig);
+        // Remove my badges.
+        $newconfig = str_replace("mybadges,badges|/badges/mybadges.php|award", "", $newconfig);
+        // Remove holes.
+        $newconfig = preg_replace('/\n+/', "\n", $newconfig);
+        $newconfig = preg_replace('/(\r\n)+/', "\n", $newconfig);
+        set_config('customusermenuitems', $newconfig);
+
+        upgrade_main_savepoint(true, 2015040900.02);
+    }
+
+    if ($oldversion < 2015040900.03) {
+        // Change the setting to the new default.
+        $oldconfig = get_config('core', 'defaulthomepage');
+        if ($oldconfig == HOMEPAGE_SITE) {
+            set_config('defaulthomepage', HOMEPAGE_MY);
+        }
+
+        upgrade_main_savepoint(true, 2015040900.03);
+    }
+
     return true;
 }

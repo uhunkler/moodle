@@ -1004,6 +1004,22 @@ class grade_report_user extends grade_report {
             }
         }
     }
+
+    /**
+     * Trigger the grade_report_viewed event
+     *
+     * @since Moodle 2.9
+     */
+    public function viewed() {
+        $event = \gradereport_user\event\grade_report_viewed::create(
+            array(
+                'context' => $this->context,
+                'courseid' => $this->courseid,
+                'relateduserid' => $this->user->id,
+            )
+        );
+        $event->trigger();
+    }
 }
 
 function grade_report_user_settings_definition(&$mform) {
@@ -1148,8 +1164,6 @@ function grade_report_user_profilereport($course, $user, $viewasuser = false) {
 
         // print the page
         echo '<div class="grade-report-user">'; // css fix to share styles with real report page
-        echo $OUTPUT->heading(get_string('pluginname', 'gradereport_user'). ' - '.fullname($report->user));
-
         if ($report->fill_table()) {
             echo $report->print_table(true);
         }

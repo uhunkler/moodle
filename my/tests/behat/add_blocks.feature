@@ -1,14 +1,14 @@
 @core @core_my
-Feature: Add blocks to my home page
-  In order to add more functionality to my home page
+Feature: Add blocks to dashboard page
+  In order to add more functionality to dashboard page
   As a user
-  I need to add blocks to my home page
+  I need to add blocks to dashboard page
 
   Background:
     Given the following "users" exist:
       | username | firstname | lastname | email |
-      | student1 | Student | 1 | student1@asd.com |
-      | student2 | Student | 2 | student2@asd.com |
+      | student1 | Student | 1 | student1@example.com |
+      | student2 | Student | 2 | student2@example.com |
     And the following "courses" exist:
       | fullname | shortname | format |
       | Course 1 | C1 | topics |
@@ -17,7 +17,7 @@ Feature: Add blocks to my home page
       | student1 | C1 | student |
       | student2 | C1 | student |
     And I log in as "student1"
-    And I click on "My home" "link" in the "Navigation" "block"
+    And I click on "Dashboard" "link" in the "Navigation" "block"
 
   Scenario: Add blocks to page
     When I press "Customise this page"

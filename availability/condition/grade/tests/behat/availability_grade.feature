@@ -10,8 +10,8 @@ Feature: availability_grade
       | Course 1 | C1        | topics | 1                |
     And the following "users" exist:
       | username | email         |
-      | teacher1 | t@example.org |
-      | student1 | s@example.org |
+      | teacher1 | t@example.com |
+      | student1 | s@example.com |
     And the following "course enrolments" exist:
       | user     | course | role           |
       | teacher1 | C1     | editingteacher |
@@ -23,6 +23,7 @@ Feature: availability_grade
   Scenario: Test condition
     # Basic setup.
     Given I log in as "teacher1"
+    And I am on site homepage
     And I follow "Course 1"
     And I turn editing mode on
 
@@ -78,6 +79,7 @@ Feature: availability_grade
     # Log in as student without a grade yet.
     When I log out
     And I log in as "student1"
+    And I am on site homepage
     And I follow "Course 1"
 
     # Do the assignment.
@@ -96,19 +98,21 @@ Feature: availability_grade
     # Log back in as teacher.
     When I log out
     And I log in as "teacher1"
+    And I am on site homepage
     And I follow "Course 1"
 
     # Give the assignment 40%.
     And I follow "A1"
     And I follow "View/grade all submissions"
-    # Pick the grade link in the row that has s@example.org in it.
-    And I click on "//a[contains(@href, 'action=grade') and ancestor::tr/td[normalize-space(.) = 's@example.org']]/img" "xpath_element"
+    # Pick the grade link in the row that has s@example.com in it.
+    And I click on "//a[contains(@href, 'action=grade') and ancestor::tr/td[normalize-space(.) = 's@example.com']]/img" "xpath_element"
     And I set the field "Grade out of 100" to "40"
     And I click on "Save changes" "button"
 
     # Log back in as student.
     And I log out
     And I log in as "student1"
+    And I am on site homepage
     And I follow "Course 1"
 
     # Check pages are visible.

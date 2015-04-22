@@ -10,9 +10,9 @@ Feature: We can use a minimum grade different than zero
       | Course 1 | C1 | 0 | 1 |
     And the following "users" exist:
       | username | firstname | lastname | email | idnumber |
-      | teacher1 | Teacher | 1 | teacher1@asd.com | t1 |
-      | student1 | Student | 1 | student1@asd.com | s1 |
-      | student2 | Student | 2 | student2@asd.com | s2 |
+      | teacher1 | Teacher | 1 | teacher1@example.com | t1 |
+      | student1 | Student | 1 | student1@example.com | s1 |
+      | student2 | Student | 2 | student2@example.com | s2 |
     And the following "course enrolments" exist:
       | user | course | role |
       | teacher1 | C1 | editingteacher |
@@ -25,7 +25,7 @@ Feature: We can use a minimum grade different than zero
     And I log in as "admin"
     And I set the following administration settings values:
       | grade_aggregations_visible | Mean of grades,Weighted mean of grades,Simple weighted mean of grades,Mean of grades (with extra credits),Median of grades,Lowest grade,Highest grade,Mode of grades,Natural |
-    And I am on homepage
+    And I am on site homepage
     And I follow "Course 1"
     And I follow "Grades"
     And I navigate to "Categories and items" node in "Grade administration > Setup"
