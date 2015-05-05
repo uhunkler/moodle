@@ -5201,7 +5201,7 @@ class admin_setting_grade_profilereport extends admin_setting_configselect {
 }
 
 /**
- * Provides a selection of grade reports to be used for "my grades".
+ * Provides a selection of grade reports to be used for "grades".
  *
  * @copyright 2015 Adrian Greeve <adrian@moodle.com>
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later

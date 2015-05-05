@@ -380,15 +380,13 @@ function note_view($context, $userid) {
  */
 function core_notes_myprofile_navigation(core_user\output\myprofile\tree $tree, $user, $iscurrentuser, $course) {
     $url = new moodle_url("/notes/index.php", array('user' => $user->id));
-    $title = $iscurrentuser ? get_string('myprofileownnotes', 'core_notes') :
-            get_string('notes', 'core_notes');
+    $title = get_string('notes', 'core_notes');
     if (empty($course)) {
         // Site level profile.
         if (!has_capability('moodle/notes:view', context_system::instance())) {
             // No cap, nothing to do.
             return false;
         }
-        $url->param('course', 0);
     } else {
         if (!has_capability('moodle/notes:view', context_course::instance($course->id))) {
             // No cap, nothing to do.

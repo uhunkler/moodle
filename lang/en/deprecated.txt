@@ -12,3 +12,10 @@ lockmethod,core_cache
 lockmethod_help,core_cache
 personalrepositories,core_repository
 siteblog,core_blog
+mybackpack,core_badges
+mybadges,core_badges
+myfiles,core
+myfilesmanage,core
+mypreferences,core_grades
+myprofile,core
+viewallmyentries,core_blog

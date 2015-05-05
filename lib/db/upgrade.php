@@ -4337,14 +4337,42 @@ function xmldb_main_upgrade($oldversion) {
         upgrade_main_savepoint(true, 2015040900.02);
     }
 
-    if ($oldversion < 2015040900.03) {
-        // Change the setting to the new default.
-        $oldconfig = get_config('core', 'defaulthomepage');
-        if ($oldconfig == HOMEPAGE_SITE) {
-            set_config('defaulthomepage', HOMEPAGE_MY);
+    if ($oldversion < 2015050400.00) {
+        $config = get_config('core', 'customusermenuitems');
+
+        // Change "My preferences" in the user menu to "Preferences".
+        $config = str_replace("mypreferences,moodle|/user/preferences.php|preferences",
+            "preferences,moodle|/user/preferences.php|preferences", $config);
+
+        // Change "My grades" in the user menu to "Grades".
+        $config = str_replace("mygrades,grades|/grade/report/mygrades.php|grades",
+            "grades,grades|/grade/report/mygrades.php|grades", $config);
+
+        set_config('customusermenuitems', $config);
+
+        upgrade_main_savepoint(true, 2015050400.00);
+    }
+
+    if ($oldversion < 2015050401.00) {
+        // Make sure we have messages in the user menu because it's no longer in the nav tree.
+        $oldconfig = get_config('core', 'customusermenuitems');
+        $messagesconfig = "messages,message|/message/index.php|message";
+        $preferencesconfig = "preferences,moodle|/user/preferences.php|preferences";
+
+        // See if it exists.
+        if (strpos($oldconfig, $messagesconfig) === false) {
+            // See if preferences exists.
+            if (strpos($oldconfig, "preferences,moodle|/user/preferences.php|preferences") !== false) {
+                // Insert it before preferences.
+                $newconfig = str_replace($preferencesconfig, $messagesconfig . "\n" . $preferencesconfig, $oldconfig);
+            } else {
+                // Custom config - we can only insert it at the end.
+                $newconfig = $oldconfig . "\n" . $messagesconfig;
+            }
+            set_config('customusermenuitems', $newconfig);
         }
 
-        upgrade_main_savepoint(true, 2015040900.03);
+        upgrade_main_savepoint(true, 2015050401.00);
     }
 
     return true;

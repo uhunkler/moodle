@@ -72,38 +72,6 @@ class renderer_base {
     private $mustache;
 
     /**
-     * @var string $component The component used when requesting this renderer.
-     */
-    private $component;
-
-    /**
-     * @var string $subtype The subtype used when requesting this renderer.
-     */
-    private $subtype;
-
-    /**
-     * This is not done in the constructor because that would be a
-     * compatibility breaking change, and we can just pass this always in the
-     * renderer factory, immediately after creating the renderer.
-     * @since 2.9
-     * @param string $subtype
-     */
-    public function set_subtype($subtype) {
-        $this->subtype = $subtype;
-    }
-
-    /**
-     * This is not done in the constructor because that would be a
-     * compatibility breaking change, and we can just pass this always in the
-     * renderer factory, immediately after creating the renderer.
-     * @since 2.9
-     * @param string $component
-     */
-    public function set_component($component) {
-        $this->component = $component;
-    }
-
-    /**
      * Return an instance of the mustache class.
      *
      * @since 2.9
@@ -118,53 +86,10 @@ class renderer_base {
 
             $themename = $this->page->theme->name;
             $themerev = theme_get_revision();
-            $target = $this->target;
 
-            $cachedir = make_localcache_directory("mustache/$themerev/$themename/$target");
-            $loaderoptions = array();
+            $cachedir = make_localcache_directory("mustache/$themerev/$themename");
 
-            // Where are all the places we should look for templates?
-
-            $suffix = $this->component;
-            if ($this->subtype !== null) {
-                $suffix .= '_' . $this->subtype;
-            }
-
-            // Start with an empty list.
-            $loader = new Mustache_Loader_CascadingLoader(array());
-            $loaderdir = $CFG->dirroot . '/theme/' . $themename . '/templates/' . $suffix;
-            if (is_dir($loaderdir)) {
-                $loader->addLoader(new \core\output\mustache_filesystem_loader($loaderdir, $loaderoptions));
-            }
-
-            // Search each of the parent themes second.
-            foreach ($this->page->theme->parents as $parent) {
-                $loaderdir = $CFG->dirroot . '/theme/' . $parent . '/templates/' . $suffix;
-                if (is_dir($loaderdir)) {
-                    $loader->addLoader(new \core\output\mustache_filesystem_loader($loaderdir, $loaderoptions));
-                }
-            }
-
-            // Look in a components templates dir for a base implementation.
-
-            $compdirectory = core_component::get_component_directory($suffix);
-            if ($compdirectory) {
-                $loaderdir = $compdirectory . '/templates';
-                if (is_dir($loaderdir)) {
-                    $loader->addLoader(new \core\output\mustache_filesystem_loader($loaderdir, $loaderoptions));
-                }
-            }
-
-            // Look in the core templates dir as a final fallback.
-
-            $compdirectory = $CFG->libdir;
-            if ($compdirectory) {
-                $loaderdir = $compdirectory . '/templates';
-                if (is_dir($loaderdir)) {
-                    $loader->addLoader(new \core\output\mustache_filesystem_loader($loaderdir, $loaderoptions));
-                }
-            }
-
+            $loader = new \core\output\mustache_filesystem_loader();
             $stringhelper = new \core\output\mustache_string_helper();
             $jshelper = new \core\output\mustache_javascript_helper($this->page->requires);
             $pixhelper = new \core\output\mustache_pix_helper($this);
@@ -2170,13 +2095,8 @@ class core_renderer extends renderer_base {
      * @return string HTML fragment
      */
     protected function render_pix_icon(pix_icon $icon) {
-        $attributes = $icon->attributes;
-        $attributes['src'] = $this->pix_url($icon->pix, $icon->component);
-        $templatecontext = array();
-        foreach ($attributes as $name => $value) {
-            $templatecontext[] = array('name' => $name, 'value' => $value);
-        }
-        return $this->render_from_template('core/pix_icon', array('attributes' => $templatecontext));
+        $data = $icon->export_for_template($this);
+        return $this->render_from_template('core/pix_icon', $data);
     }
 
     /**
@@ -4120,17 +4040,11 @@ EOD;
     /**
      * Wrapper for header elements.
      *
-     * @param string $heading Heading to be used for the main header.
      * @return string HTML to display the main header.
      */
-    public function full_header($heading = null) {
+    public function full_header() {
         $html = html_writer::start_tag('header', array('id' => 'page-header', 'class' => 'clearfix'));
-        // This is to ensure that the logo completely overwrites the header if set.
-        if (isset($heading) && $heading == '<div class="logo"></div>') {
-            $html .= $heading;
-        } else {
-            $html .= $this->context_header(array('heading' => $heading));
-        }
+        $html .= $this->context_header();
         $html .= html_writer::start_div('clearfix', array('id' => 'page-navbar'));
         $html .= html_writer::tag('nav', $this->navbar(), array('class' => 'breadcrumb-nav'));
         $html .= html_writer::div($this->page_heading_button(), 'breadcrumb-button');
