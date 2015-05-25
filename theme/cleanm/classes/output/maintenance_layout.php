@@ -42,7 +42,7 @@ class maintenance_layout extends base_layout implements renderable, templatable 
         $data->body_attributes = $output->body_attributes();
 
         $data->pagelayout =
-            $output->render_from_template('theme_cleanm/partials/maintenance', $data);
+            $output->render_from_template('theme_cleanm/partials_maintenance', $data);
 
         return $data;
     }

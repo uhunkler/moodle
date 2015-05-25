@@ -1,5 +1,6 @@
 .navbar-fixed-top .navbar-inner {
     background-image: linear-gradient(to bottom, #fff, #efe);
+    border-bottom: 0;
 }
 
 /* Custom CSS

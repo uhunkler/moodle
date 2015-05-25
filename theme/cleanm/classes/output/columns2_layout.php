@@ -52,7 +52,7 @@ class columns2_layout extends base_layout implements renderable, templatable {
         $data->blocks_side_pre = $output->blocks('side-pre', $sidepre);
 
         $data->pagelayout =
-            $output->render_from_template('theme_cleanm/partials/columns2', $data);
+            $output->render_from_template('theme_cleanm/partials_columns2', $data);
 
         return $data;
     }

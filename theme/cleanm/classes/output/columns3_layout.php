@@ -58,7 +58,7 @@ class columns3_layout extends base_layout implements renderable, templatable {
         $data->blocks_side_post = $output->blocks('side-post', $sidepost);
 
         $data->pagelayout =
-            $output->render_from_template('theme_cleanm/partials/columns3', $data);
+            $output->render_from_template('theme_cleanm/partials_columns3', $data);
 
         return $data;
     }

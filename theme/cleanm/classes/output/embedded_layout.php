@@ -42,7 +42,7 @@ class embedded_layout extends base_layout implements renderable, templatable {
         $data->body_attributes = $output->body_attributes();
 
         $data->pagelayout =
-            $output->render_from_template('theme_cleanm/partials/embedded', $data);
+            $output->render_from_template('theme_cleanm/partials_embedded', $data);
         return $data;
     }
 }
