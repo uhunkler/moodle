@@ -56,6 +56,7 @@ class secure_layout extends base_layout implements renderable, templatable {
         $data->regionmain = $regionmain;
         $data->blocks_side_pre = $output->blocks('side-pre', $sidepre);
         $data->blocks_side_post = $output->blocks('side-post', $sidepost);
+        $data->user_menu = null;
 
         $data->pagelayout =
             $output->render_from_template('theme_cleanm/partials_secure', $data);
