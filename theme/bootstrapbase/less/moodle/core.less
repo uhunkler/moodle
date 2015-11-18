@@ -179,9 +179,13 @@ a.autolink.glossary:hover {
 .collapsibleregioncaption {
     white-space: nowrap;
 }
+.pagelayout-mydashboard.jsenabled .collapsibleregioncaption {
+    cursor: pointer;
+}
 .collapsibleregioncaption img {
     vertical-align: middle;
 }
+
 .jsenabled .hiddenifjs {
     display: none;
 }
@@ -1219,6 +1223,10 @@ body.tag .managelink {
     }
 }
 
+#page-enrol-users .enrol-users-page-action input {
+    margin-left: 0
+}
+
 /**
 * Overide for RTL layout
 **/
@@ -2104,8 +2112,6 @@ img#persona_signin {
     }
     .page-header-image {
         margin-bottom: 1em;
-        z-index: 1;
-
     }
     .page-header-headings {
         margin-top: 30px;
@@ -2151,10 +2157,8 @@ img#persona_signin {
         float: right;
         margin-left: 1em;
     }
-
-    .header-button-group{
+    .header-button-group {
         float: left;
-        right: -15px;
     }
 }
 

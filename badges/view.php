@@ -48,7 +48,7 @@ if (!in_array($sortby, array('name', 'dateissued'))) {
 }
 
 if ($sorthow != 'ASC' && $sorthow != 'DESC') {
-    $sorthow = 'ACS';
+    $sorthow = 'ASC';
 }
 
 if ($page < 0) {
@@ -74,6 +74,8 @@ if ($type == BADGE_TYPE_SITE) {
     $PAGE->set_pagelayout('incourse');
     $PAGE->set_heading($coursename);
 }
+
+require_capability('moodle/badges:viewbadges', $PAGE->context);
 
 $PAGE->set_title($title);
 $output = $PAGE->get_renderer('core', 'badges');

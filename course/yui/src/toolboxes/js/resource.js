@@ -293,7 +293,7 @@ Y.extend(RESOURCETOOLBOX, TOOLBOX, {
             };
             this.send_request(data);
             if (M.core.actionmenu && M.core.actionmenu.instance) {
-                M.core.actionmenu.instance.hideMenu();
+                M.core.actionmenu.instance.hideMenu(ev);
             }
 
         }, this);
@@ -484,6 +484,8 @@ Y.extend(RESOURCETOOLBOX, TOOLBOX, {
         newtitlestr = M.util.get_string('clicktochangeinbrackets', 'moodle', M.util.get_string(newtitle, 'moodle'));
 
         // Change the UI
+        var oldAction = button.getData('action');
+        button.replaceClass('editing_' + oldAction, 'editing_' + newtitle);
         buttonimg.setAttrs({
             'src': iconsrc
         });
@@ -540,7 +542,7 @@ Y.extend(RESOURCETOOLBOX, TOOLBOX, {
 
         this.send_request(data, null, function(response) {
             if (M.core.actionmenu && M.core.actionmenu.instance) {
-                M.core.actionmenu.instance.hideMenu();
+                M.core.actionmenu.instance.hideMenu(ev);
             }
 
             // Try to retrieve the existing string from the server
@@ -665,6 +667,13 @@ Y.extend(RESOURCETOOLBOX, TOOLBOX, {
         Y.later(100, this, function() {
             activity.one(SELECTOR.EDITTITLE).focus();
         });
+
+        // TODO MDL-50768 This hack is to keep Behat happy until they release a version of
+        // MinkSelenium2Driver that fixes
+        // https://github.com/Behat/MinkSelenium2Driver/issues/80.
+        if (!Y.one('input[name=title]')) {
+            Y.one('body').append('<input type="text" name="title" style="display: none">');
+        }
     },
 
     /**

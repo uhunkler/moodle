@@ -128,7 +128,7 @@ class mod_data_external extends external_api {
                 // Format intro.
                 list($newdb['intro'], $newdb['introformat']) =
                     external_format_text($database->intro, $database->introformat,
-                                            $datacontext->id, 'mod_data', 'intro', $database->id);
+                                            $datacontext->id, 'mod_data', 'intro', null);
 
                 // This information should be only available if the user can see the database entries.
                 if (has_capability('mod/data:viewentry', $datacontext)) {
@@ -188,7 +188,7 @@ class mod_data_external extends external_api {
                         array(
                             'id' => new external_value(PARAM_INT, 'Database id'),
                             'coursemodule' => new external_value(PARAM_INT, 'Course module id'),
-                            'course' => new external_value(PARAM_TEXT, 'Course id'),
+                            'course' => new external_value(PARAM_INT, 'Course id'),
                             'name' => new external_value(PARAM_TEXT, 'Database name'),
                             'intro' => new external_value(PARAM_RAW, 'The Database intro'),
                             'introformat' => new external_format_value('intro'),
